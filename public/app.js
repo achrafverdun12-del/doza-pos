@@ -1363,6 +1363,9 @@ function bind() {
   el.tabs.forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
   el.loginBtn.addEventListener("click", login);
   el.logoutBtn.addEventListener("click", logout);
+  el.staffSelect.addEventListener("change", () => { el.staffPin.value = ""; });
+  el.staffPin.value = "";
+  setTimeout(() => { el.staffPin.value = ""; }, 100);
   el.fullscreenBtn.addEventListener("click", () => {
     if (document.fullscreenElement) {
       document.exitFullscreen();

@@ -20,14 +20,17 @@
       </div>
     </header>
 
-    <section class="panel auth-wrap">
+    <section class="panel auth-wrap" style="isolation:isolate">
       <div>
         <label for="staffSelect">Employe</label>
         <select id="staffSelect"></select>
       </div>
       <div>
         <label for="staffPin">Code PIN</label>
-        <input id="staffPin" type="password" placeholder="Saisir le PIN" />
+        <input id="staffPin" type="password" placeholder="Saisir le PIN" autocomplete="new-password" />
+        <!-- Dummy hidden fields to prevent browser autofill -->
+        <input type="text" style="display:none" />
+        <input type="password" style="display:none" />
       </div>
       <button id="loginBtn" class="primary">Connexion</button>
       <button id="logoutBtn" class="ghost">Deconnexion</button>
