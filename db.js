@@ -144,7 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_client_ledger_order_id ON client_ledger(order_id)
       { id: "BARISTA 1", name: "YASSINE", role: "barista", pin_hash: "$2b$10$RKrVEcbZWLcXfI.r0VDQXueOcF/XFfnSVJoCFevKqbK6qTLlnA0ZK" },
       { id: "CHEF", name: "REDA", role: "admin", pin_hash: "$2b$10$dk4XbF9KFset1aXJF1fQ2Owr5Pg3Miwy.w/k/89joMOTJElqccahO" },
       { id: "CHEF 2", name: "AHMED", role: "admin", pin_hash: "$2b$10$1p0CaIoR0d0Sh4n6ptQx0ehE7KNsY2hYuh.UlAbWjaAdbAiRbGDu." },
-      { id: "DOZACOFFEE", name: "Doza Cloud Admin", role: "admin", pin_hash: "$2b$10$CYDCCDXxw90tu1BQQBTodea6ZSRRSsU/j0f3Gb8FGVcCszoyZ3doy" },
+      { id: "DOZACOFFEE", name: "Doza Cloud Admin", role: "admin", pin_hash: "$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy" },
     ]) {
       const existing = await get("SELECT id FROM staff WHERE id = ?", [s.id]);
       if (!existing) await run("INSERT INTO staff (id, name, role, pin_hash) VALUES (?, ?, ?, ?)", [s.id, s.name, s.role, s.pin_hash]);
@@ -170,7 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_client_ledger_order_id ON client_ledger(order_id)
   }
 
   // Fix DOZACOFFEE password hash (was corrupted during migration)
-  await run("UPDATE staff SET pin_hash = ? WHERE id = 'DOZACOFFEE'", ["$2b$10$CYDCCDXxw90tu1BQQBTodea6ZSRRSsU/j0f3Gb8FGVcCszoyZ3doy"]);
+  await run("UPDATE staff SET pin_hash = ? WHERE id = 'DOZACOFFEE'", ["$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy"]);
 }
 
 const initPromise = init().catch(e => {
