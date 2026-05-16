@@ -8,19 +8,12 @@ const multer = require("multer");
 const crypto = require("crypto");
 const PDFDocument = require("pdfkit");
 const XLSX = require("xlsx");
-const { createClient } = require("@supabase/supabase-js");
 const { all, get, run, transaction } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 5050;
 const JWT_SECRET = process.env.DOZA_JWT_SECRET || "doza-local-secret-change-me";
 const TAX_RATE = 0;
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://vraupzzvkiigmvpzrxxw.supabase.co";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const broadcastChannel = supabase.channel("pos-updates");
-broadcastChannel.subscribe();
 
 app.use(cors());
 app.use(express.json());
@@ -29,11 +22,7 @@ app.use(express.static(path.join(__dirname, "public"), { index: false }));
 const roleLevel = { barista: 1, cashier: 1, manager: 1, admin: 3 };
 
 function broadcastStateChange(type, payload = {}) {
-  broadcastChannel.send({
-    type: "broadcast",
-    event: "state:update",
-    payload: { type, at: new Date().toISOString(), ...payload }
-  }).catch(() => {});
+  // Real-time via client polling - no server push needed
 }
 
 function auth(req, res, next) {
