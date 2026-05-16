@@ -242,10 +242,9 @@ function setTab(name) {
 
 function renderAuth() {
   el.staffSelect.innerHTML = state.staff.map((s) => `<option value="${s.id}">${s.name} (${s.role})</option>`).join("");
-  const realtime = state.socket?.connected ? "Temps reel: Connecte" : "Temps reel: Hors ligne";
   el.sessionInfo.textContent = state.session
-    ? `Session: ${state.session.name} (${state.session.role}) | ${realtime}`
-    : `Aucune session active | ${realtime}`;
+    ? `Session: ${state.session.name} (${state.session.role})`
+    : `Aucune session active`;
 
   // Ensure employee view hides admin tabs before any interaction.
   updateTabVisibility();
