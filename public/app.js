@@ -426,18 +426,15 @@ async function loadAdminShiftPnlHistory() {
 }
 
 function bindRealtime() {
-  if (typeof io === "undefined" || state.socket) return;
-  state.socket = io();
+  if (typeof supabase === "undefined" || state.channel) return;
 
-  state.socket.on("connect", () => {
-    renderAuth();
-  });
+  const client = supabase.createClient(
+    "https://vraupzzvkiigmvpzrxxw.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyYXVwenp2a2lpZ212cHpyeHh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4ODIyNzQsImV4cCI6MjA5NDQ1ODI3NH0.hwPxOl_FYzNqu9iHHzmnZgQy5utnRiM9vtTsyKiJc_Y"
+  );
 
-  state.socket.on("disconnect", () => {
-    renderAuth();
-  });
-
-  state.socket.on("state:update", async () => {
+  state.channel = client.channel("pos-updates");
+  state.channel.on("broadcast", { event: "state:update" }, async () => {
     if (!state.token) return;
     try {
       await refreshServerState();
@@ -446,6 +443,7 @@ function bindRealtime() {
       // Ignore transient refresh failures during reconnect windows.
     }
   });
+  state.channel.subscribe();
 }
 
 function setPaymentModeUI() {

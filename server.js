@@ -3,22 +3,24 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const path = require("path");
-const http = require("http");
 const fs = require("fs");
 const multer = require("multer");
 const crypto = require("crypto");
 const PDFDocument = require("pdfkit");
 const XLSX = require("xlsx");
-const { Server } = require("socket.io");
+const { createClient } = require("@supabase/supabase-js");
 const { all, get, run, transaction } = require("./db");
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
-
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5050;
+const PORT = process.env.PORT || 5050;
 const JWT_SECRET = process.env.DOZA_JWT_SECRET || "doza-local-secret-change-me";
 const TAX_RATE = 0;
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://vraupzzvkiigmvpzrxxw.supabase.co";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const broadcastChannel = supabase.channel("pos-updates");
+broadcastChannel.subscribe();
 
 app.use(cors());
 app.use(express.json());
@@ -27,7 +29,11 @@ app.use(express.static(path.join(__dirname, "public"), { index: false }));
 const roleLevel = { barista: 1, cashier: 1, manager: 1, admin: 3 };
 
 function broadcastStateChange(type, payload = {}) {
-  io.emit("state:update", { type, at: new Date().toISOString(), ...payload });
+  broadcastChannel.send({
+    type: "broadcast",
+    event: "state:update",
+    payload: { type, at: new Date().toISOString(), ...payload }
+  }).catch(() => {});
 }
 
 function auth(req, res, next) {
@@ -1187,5 +1193,8 @@ app.delete("/api/admin/materials/stock-entry/:id", auth, requireRole("admin"), a
 // Fallback
 app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-io.on("connection", (socket) => socket.emit("server:hello", { message: "Realtime sync connected" }));
-server.listen(PORT, "0.0.0.0", () => console.log(`Doza POS backend running on http://0.0.0.0:${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, "0.0.0.0", () => console.log(`Doza POS backend running on http://0.0.0.0:${PORT}`));
+}
+
+module.exports = app;
