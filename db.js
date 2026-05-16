@@ -1,11 +1,42 @@
 const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const dns = require("dns").promises;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 1,
-});
+let pool;
+let initError = null;
+
+async function createPool() {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error("DATABASE_URL not set");
+
+  const url = new URL(raw);
+  try {
+    const ips = await dns.resolve6(url.hostname);
+    if (ips.length > 0) {
+      url.hostname = `[${ips[0]}]`;
+      console.log("Resolved", raw.split("@")[1]?.split(":")[0] || "host", "->", ips[0]);
+    }
+  } catch (e) {
+    console.warn("DNS AAAA lookup failed, trying A:", e.message);
+    try {
+      const ips = await dns.resolve4(url.hostname);
+      if (ips.length > 0) {
+        url.hostname = ips[0];
+        console.log("Resolved (A)", raw.split("@")[1]?.split(":")[0] || "host", "->", ips[0]);
+      }
+    } catch (e2) {
+      console.warn("DNS A lookup also failed, using original hostname:", e2.message);
+    }
+  }
+
+  pool = new Pool({
+    connectionString: url.toString(),
+    max: 1,
+  });
+  await pool.query("SELECT 1");
+  console.log("DB connected");
+}
 
 function q(sql, params) {
   let idx = 0;
@@ -13,6 +44,8 @@ function q(sql, params) {
 }
 
 async function all(sql, params) {
+  await initPromise;
+  if (!pool) throw new Error("Database not connected: " + (initError?.message || "unknown"));
   return (await pool.query(q(sql, params))).rows;
 }
 async function get(sql, params) {
@@ -20,10 +53,14 @@ async function get(sql, params) {
   return rows[0] || null;
 }
 async function run(sql, params) {
+  await initPromise;
+  if (!pool) throw new Error("Database not connected: " + (initError?.message || "unknown"));
   return { changes: (await pool.query(q(sql, params))).rowCount };
 }
 
 async function transaction(fn) {
+  await initPromise;
+  if (!pool) throw new Error("Database not connected: " + (initError?.message || "unknown"));
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -44,6 +81,8 @@ async function transaction(fn) {
 }
 
 async function init() {
+  await createPool();
+
   const tables = [
     `CREATE TABLE IF NOT EXISTS staff (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, pin_hash TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, price DOUBLE PRECISION NOT NULL, stock INTEGER NOT NULL, image_path TEXT)`,
@@ -93,7 +132,6 @@ async function init() {
     } catch { }
   }
 
-  // Seed
   const sc = await get("SELECT COUNT(*) AS c FROM staff");
   if (Number(sc?.c) === 0) {
     const users = [
@@ -132,7 +170,6 @@ async function init() {
     await run("INSERT INTO cash_audit (id, actual_cash, variance) VALUES (1, 0, 0)");
   }
 
-  // Import existing user data if meta key absent
   const metaCheck = await get("SELECT value FROM meta WHERE key = 'menu_defaults_removed_v1'");
   if (!metaCheck) {
     await run("INSERT INTO meta (key, value) VALUES ('menu_defaults_removed_v1', '1')");
@@ -167,10 +204,9 @@ async function init() {
   }
 }
 
-let initError = null;
 const initPromise = init().catch(e => {
   console.error("DB init error:", e);
   initError = e;
 });
 
-module.exports = { all, get, run, transaction, pool, initPromise };
+module.exports = { all, get, run, transaction, get pool() { return pool }, initPromise, initError };
