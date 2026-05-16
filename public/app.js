@@ -599,7 +599,7 @@ function renderInventory() {
       </div>
       <input data-material-id="${mat.id}" type="number" min="0" step="0.01" value="${mat.quantity}" ${allowed ? "" : "disabled"} />
       <input data-material-cost-id="${mat.id}" type="number" min="0" step="0.01" value="${Number(mat.cost_per_kg || 0)}" ${allowed ? "" : "disabled"} />
-      <input data-material-add-id="${mat.id}" type="number" min="0" step="0.01" value="0" placeholder="+ Stock (kg)" ${allowed ? "" : "disabled"} />
+      <input data-material-add-id="${mat.id}" type="number" min="0" step="0.01" placeholder="+ Stock (kg)" ${allowed ? "" : "disabled"} />
       <button data-add-stock-material="${mat.id}" class="primary" ${allowed ? "" : "disabled"}>Add stock</button>
       <button data-save-material="${mat.id}" class="ghost" ${allowed ? "" : "disabled"}>Save</button>
       <button data-delete-material="${mat.id}" class="danger" ${allowed ? "" : "disabled"}>Delete</button>
