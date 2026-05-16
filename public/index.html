@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doza Coffee POS - Phase 4</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar panel">
+      <div>
+        <h1>Doza Coffee POS</h1>
+        <p class="muted">Phase 4 - Synchronisation temps reel + Impression thermique + Rapports fin de journee</p>
+      </div>
+      <div class="status-wrap">
+        <div id="clock" class="clock"></div>
+        <div id="activeShiftBadge" class="badge danger">Service ferme</div>
+        <button id="fullscreenBtn" class="ghost" title="Plein écran">⛶</button>
+      </div>
+    </header>
+
+    <section class="panel auth-wrap">
+      <div>
+        <label for="staffSelect">Employe</label>
+        <select id="staffSelect"></select>
+      </div>
+      <div>
+        <label for="staffPin">Code PIN</label>
+        <input id="staffPin" type="password" placeholder="Saisir le PIN" />
+      </div>
+      <button id="loginBtn" class="primary">Connexion</button>
+      <button id="logoutBtn" class="ghost">Deconnexion</button>
+      <p id="sessionInfo" class="muted"></p>
+    </section>
+
+    <nav class="tabs">
+      <button data-tab="register" class="tab active">Caisse</button>
+      <button data-tab="operations" class="tab">Operations</button>
+      <button data-tab="historique" class="tab">Historique</button>
+      <button data-tab="admin" class="tab">Admin</button>
+      <button data-tab="finance" class="tab">Charge & Dépense</button>
+      <button data-tab="analyse" class="tab">Analyse PNL</button>
+    </nav>
+
+    <main>
+      <section id="tab-register" class="tab-page active">
+        <div class="grid">
+          <section class="panel menu-panel">
+            <div class="panel-head">
+              <h2>Menu</h2>
+              <input id="searchInput" type="search" placeholder="Rechercher un article..." />
+            </div>
+            <div id="categoryFilters" class="chips"></div>
+            <div id="menuGrid" class="menu-grid"></div>
+          </section>
+
+          <section class="panel cart-panel" style="grid-column: 2 / 3;">
+            <div class="panel-head">
+              <h2>Ticket en cours</h2>
+              <button id="newTicketBtn" class="ghost">Nouveau ticket</button>
+            </div>
+            <div id="cartItems" class="cart-items"></div>
+
+            <div class="totals">
+              <div><span>Sous-total</span><strong id="subtotal">0.00 MAD</strong></div>
+              <div><span>Taxe</span><strong id="tax">0.00 MAD</strong></div>
+              <div class="grand"><span>Total</span><strong id="total">0.00 MAD</strong></div>
+            </div>
+
+            <div class="payment-method">
+              <label for="paymentMethod">Paiement</label>
+              <select id="paymentMethod">
+                <option value="CASH">Espèces</option>
+                <option value="CREDIT">Crédit</option>
+              </select>
+            </div>
+
+            <div id="cashBoxWrap" class="cash-box">
+              <label for="cashReceived">Montant recu (MAD)</label>
+              <input id="cashReceived" type="number" min="0" step="0.01" placeholder="0.00" />
+              <div><span>Monnaie</span><strong id="change">0.00 MAD</strong></div>
+            </div>
+
+            <button id="checkoutBtn" class="primary">Valider</button>
+
+            <section class="clients-panel">
+              <h3>Clients fidélité</h3>
+              <label for="clientSelect">Client</label>
+              <select id="clientSelect"></select>
+              <p id="clientCreditInfo" class="muted"></p>
+
+              <div class="topup-row">
+                <input id="topUpAmount" type="number" min="0" step="0.01" placeholder="Top up (MAD)" />
+                <button id="topUpBtn" class="ghost">Top up</button>
+              </div>
+            </section>
+          </section>
+
+        </div>
+      </section>
+
+      <section id="tab-operations" class="tab-page">
+        <div class="two-col">
+          <section class="panel">
+            <h2>Gestion de service</h2>
+            <label for="openingFloat">Fonds d'ouverture (MAD)</label>
+            <input id="openingFloat" type="number" min="0" step="0.01" placeholder="0.00" />
+            <div class="row-actions">
+              <button id="openShiftBtn" class="primary">Ouvrir le service</button>
+              <button id="closeShiftBtn" class="danger">Changer / Cloturer shift</button>
+            </div>
+            <p id="shiftSummary" class="muted"></p>
+          </section>
+
+          <section class="panel">
+            <h2>Rapprochement caisse</h2>
+            <div class="mini-grid">
+              <article id="expectedCashCard"><p>Caisse theorique</p><strong id="expectedCash">0.00 MAD</strong></article>
+              <article><p>Caisse reelle</p><strong id="actualCash">0.00 MAD</strong></article>
+              <article id="varianceCard"><p>Variance</p><strong id="variance">0.00 MAD</strong></article>
+            </div>
+            <label for="actualCashInput">Saisir la caisse reelle</label>
+            <input id="actualCashInput" type="number" min="0" step="0.01" placeholder="0.00" />
+            <div class="row-actions" id="adminReconActions">
+              <button id="reconcileBtn" class="ghost">Rapprocher</button>
+              <button id="downloadReportBtn" class="ghost">Telecharger CSV du jour</button>
+              <button id="downloadPdfBtn" class="ghost">Telecharger PDF du jour</button>
+            </div>
+          </section>
+
+          <section class="panel" id="adminShiftPnlPanel" style="display:none;">
+            <h2>PNL Fin de Journée (Admin)</h2>
+            <div class="mini-grid">
+              <article><p>CA Cash Jour</p><strong id="adminShiftCashRevenue">0.00 MAD</strong></article>
+              <article><p>Coût Conso Jour</p><strong id="adminShiftConsumptionCost">0.00 MAD</strong></article>
+              <article><p>Net Estimé Jour</p><strong id="adminShiftNetPnl">0.00 MAD</strong></article>
+            </div>
+            <h3 style="margin-top:14px;">PNL du Jour</h3>
+            <div class="mini-grid">
+              <article><p>CA Cash Jour</p><strong id="adminDayCashRevenue">0.00 MAD</strong></article>
+              <article><p>Coût Conso Jour</p><strong id="adminDayConsumptionCost">0.00 MAD</strong></article>
+              <article><p>Net Jour</p><strong id="adminDayNetPnl">0.00 MAD</strong></article>
+            </div>
+            <h3 style="margin-top:14px;">Historique PNL Jours</h3>
+            <div id="adminShiftPnlHistory" class="inventory-list" style="max-height:30vh;"></div>
+            <p class="muted" style="margin-top:8px;">Visible uniquement pour admin. Clôture inventaire/conso à la fin de journée.</p>
+          </section>
+
+          <section class="panel">
+            <h2>Inventaire matiere premiere (fin de journée)</h2>
+            <div class="muted">On évite la pesée à chaque changement de shift. Clôture matière en fin de journée seulement.</div>
+            <div id="shiftMaterialsList" class="inventory-list"></div>
+            <div class="row-actions">
+              <button id="startMaterialsInventoryBtn" class="ghost">Inventaire debut jour</button>
+              <button id="endMaterialsInventoryBtn" class="ghost">Inventaire fin jour</button>
+              <button id="completeShiftBtn" class="primary">Clôture fin de journée</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-historique" class="tab-page">
+        <div class="two-col">
+          <section class="panel">
+            <h2>Historique des commandes</h2>
+            <div class="stack">
+              <input id="historyOrderFrom" type="date" />
+              <input id="historyOrderTo" type="date" />
+              <button id="loadHistoryBtn" class="primary">Charger historique</button>
+            </div>
+            <div id="historyOrderList" class="inventory-list" style="max-height:60vh;"></div>
+          </section>
+          <section class="panel">
+            <h2>Consommation du jour (grammes)</h2>
+            <div id="dayConsumptionList" class="inventory-list"></div>
+            <h2 style="margin-top:16px;">Entrées de stock</h2>
+            <div id="stockEntryList" class="inventory-list" style="max-height:40vh;"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-admin" class="tab-page">
+        <div class="two-col">
+          <section class="panel">
+            <h2>Matiere Premiere - Inventaire</h2>
+            <div class="stack">
+              <input id="materialNameInput" placeholder="Nom de la matiere (ex: Cafe)" />
+              <input id="materialUnitInput" placeholder="Unite (kg, L...)" value="kg" />
+              <input id="materialQuantityInput" type="number" step="0.01" placeholder="Quantite actuelle" />
+              <input id="materialCostPerKgInput" type="number" min="0" step="0.01" placeholder="Cout par kilo (MAD)" />
+              <button id="addMaterialBtn" class="primary">Ajouter matiere</button>
+            </div>
+            <div id="inventoryList" class="inventory-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Employes (Admin)</h2>
+            <div class="stack">
+              <input id="staffIdInput" placeholder="ID (ex: barista1)" />
+              <input id="staffNameInput" placeholder="Nom" />
+              <select id="staffRoleInput">
+                <option value="barista">barista</option>
+                <option value="admin">admin</option>
+              </select>
+              <input id="staffPinInput" type="password" placeholder="PIN" />
+              <button id="addStaffBtn" class="primary">Ajouter</button>
+            </div>
+            <div id="staffAdminList" class="inventory-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Clients</h2>
+            <div class="stack">
+              <input id="clientNameInput" placeholder="Nom du client" />
+              <input id="clientCreditLineInput" type="number" min="0" step="1" placeholder="Credit line (MAD)" />
+              <input id="clientStartingBalanceInput" type="number" step="0.01" placeholder="Balance de depart (MAD)" />
+              <button id="addClientBtn" class="primary">Ajouter le client</button>
+            </div>
+            <div id="clientAdminList" class="inventory-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Gestion du menu</h2>
+            <div class="stack">
+              <input id="newName" placeholder="Nom de l'article" />
+              <input id="newCategory" placeholder="Categorie" />
+              <input id="newPrice" type="number" min="0" step="0.01" placeholder="Prix" />
+              <input id="newStock" type="number" min="0" step="1" placeholder="Stock initial" />
+              <input id="newImage" type="file" accept="image/*" />
+              <button id="addMenuItemBtn" class="primary">Ajouter l'article</button>
+              <button id="clearMenuBtn" class="danger">Vider le menu</button>
+            </div>
+            <h3>Produits actuels</h3>
+            <div id="menuAdminList" class="inventory-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-finance" class="tab-page">
+        <div class="two-col">
+          <section class="panel">
+            <h2>Charge & Dépense (Fixe)</h2>
+            <h3>Dépenses fixes - Quotidiennes</h3>
+            <div class="stack">
+              <input id="dailyExpNameInput" placeholder="Nom depense (ex: Café)" />
+              <input id="dailyExpAmountInput" type="number" min="0" step="0.01" placeholder="Montant MAD / jour" />
+              <button id="addDailyExpBtn" class="primary">Ajouter quotidien</button>
+            </div>
+            <div id="dailyExpList" class="inventory-list"></div>
+
+            <h3 style="margin-top:16px;">Dépenses fixes - Mensuelles</h3>
+            <div class="stack">
+              <input id="monthlyExpNameInput" placeholder="Nom depense (ex: Loyer)" />
+              <input id="monthlyExpAmountInput" type="number" min="0" step="0.01" placeholder="Montant MAD / mois" />
+              <button id="addMonthlyExpBtn" class="primary">Ajouter mensuel</button>
+            </div>
+            <div id="monthlyExpList" class="inventory-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Dépenses ponctuelles</h2>
+            <div class="stack">
+              <input id="manualExpDateInput" type="date" />
+              <input id="manualExpNameInput" placeholder="Nom depense" />
+              <input id="manualExpAmountInput" type="number" min="0" step="0.01" placeholder="Montant MAD" />
+              <button id="addManualExpBtn" class="primary">Ajouter dépense</button>
+            </div>
+
+            <h3 style="margin-top:16px;">Export Excel (Admin)</h3>
+            <div class="stack">
+              <select id="exportModeSelect">
+                <option value="today">Du jour</option>
+                <option value="month">Du mois</option>
+                <option value="3months">3 mois</option>
+                <option value="custom">Custom</option>
+                <option value="all">Tout</option>
+              </select>
+              <input id="exportFromInput" type="date" />
+              <input id="exportToInput" type="date" />
+            </div>
+            <div class="row-actions" style="flex-wrap:wrap;">
+              <button id="exportExcelAllBtn" class="ghost">Exporter tout (XLSX)</button>
+            </div>
+
+            <h3 style="margin-top:16px;">Historique des dépenses</h3>
+            <div class="stack">
+              <input id="expenseHistoryFromInput" type="date" />
+              <input id="expenseHistoryToInput" type="date" />
+              <button id="loadExpenseHistoryBtn" class="ghost">Charger historique</button>
+            </div>
+            <div id="expenseHistoryList" class="inventory-list" style="margin-top:10px; max-height:35vh;"></div>
+
+            <h3 style="margin-top:16px; color: var(--danger);">Réinitialiser (test -> 0)</h3>
+            <p class="muted">Supprime les données de caisse / clients / dépenses. Menu et employés restent.</p>
+            <div class="stack" style="margin-top:10px;">
+              <input id="resetCodeInput" type="password" placeholder="Code (4444)" />
+              <button id="resetAllBtn" class="danger">Re-initialiser tout</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-analyse" class="tab-page">
+        <div class="two-col">
+          <section class="panel">
+            <h2>Résumé PNL (Admin)</h2>
+            <button id="refreshPnlBtn" class="ghost">Actualiser PNL</button>
+            <div class="kpis" style="margin-top:12px;">
+              <article><p>Revenus aujourd'hui</p><strong id="pnlTodayRevenue">0.00 MAD</strong></article>
+              <article><p>Dépenses aujourd'hui</p><strong id="pnlTodayExpense">0.00 MAD</strong></article>
+              <article><p>Net aujourd'hui</p><strong id="pnlTodayNet">0.00 MAD</strong></article>
+            </div>
+            <div class="kpis" style="margin-top:12px;">
+              <article><p>Revenus ce mois</p><strong id="pnlMonthRevenue">0.00 MAD</strong></article>
+              <article><p>Dépenses ce mois</p><strong id="pnlMonthExpense">0.00 MAD</strong></article>
+              <article><p>Net ce mois</p><strong id="pnlMonthNet">0.00 MAD</strong></article>
+            </div>
+            <div class="kpis" style="margin-top:12px;">
+              <article><p>Revenus cette année</p><strong id="pnlYearRevenue">0.00 MAD</strong></article>
+              <article><p>Dépenses cette année</p><strong id="pnlYearExpense">0.00 MAD</strong></article>
+              <article><p>Net cette année</p><strong id="pnlYearNet">0.00 MAD</strong></article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>En détails (Admin)</h2>
+            <div class="stack">
+              <label for="pnlRangeFromInput">From</label>
+              <input id="pnlRangeFromInput" type="date" />
+              <label for="pnlRangeToInput">To</label>
+              <input id="pnlRangeToInput" type="date" />
+              <select id="pnlRangePeriodSelect">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+              <button id="pnlRangeCalculateBtn" class="primary">Calculer PNL</button>
+            </div>
+            <div id="pnlRangeTable" class="inventory-list" style="margin-top:12px; max-height:50vh;"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="receiptDialog">
+    <article class="thermal-receipt">
+      <h3>Ticket</h3>
+      <pre id="receiptText"></pre>
+      <div class="row-actions">
+        <button id="printReceiptBtn" class="ghost">Imprimer</button>
+        <button id="closeReceiptBtn" class="primary">Fermer</button>
+      </div>
+    </article>
+  </dialog>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

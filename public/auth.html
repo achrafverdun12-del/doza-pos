@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doza POS - Auth</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar panel">
+      <div>
+        <h1>Doza POS</h1>
+        <p class="muted">Connexion Cloud (Admin)</p>
+      </div>
+    </header>
+
+    <section class="panel auth-wrap" style="margin-top: 14px; justify-content: center;">
+      <div style="min-width: 320px;">
+        <div>
+          <label for="username">Username</label>
+          <input id="username" type="text" placeholder="Username" />
+        </div>
+        <div style="margin-top: 10px;">
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="Password" />
+        </div>
+        <div style="margin-top: 12px; display:flex; gap: 10px; flex-wrap: wrap;">
+          <button id="loginCloudBtn" class="primary">Connexion</button>
+          <a href="/pos" style="align-self:center; color: var(--muted); text-decoration: none;">Retour POS</a>
+        </div>
+        <p id="cloudStatus" class="muted" style="margin-top: 10px;"></p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const btn = $("loginCloudBtn");
+    const statusEl = $("cloudStatus");
+
+    btn.addEventListener("click", async () => {
+      try {
+        statusEl.textContent = "Connexion...";
+        const username = $("username").value.trim();
+        const password = $("password").value;
+
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ staffId: username, pin: password })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Login failed");
+
+        // Session-only login (do not auto-login on next launch)
+        sessionStorage.setItem("doza-token", data.token);
+        localStorage.removeItem("doza-token");
+        window.location.href = "/pos";
+      } catch (e) {
+        statusEl.textContent = e.message || "Login failed";
+      }
+    });
+  </script>
+</body>
+</html>
+

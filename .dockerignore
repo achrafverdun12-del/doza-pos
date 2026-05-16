@@ -1,0 +1,6 @@
+node_modules
+doza-pos.db
+doza-pos.db-shm
+doza-pos.db-wal
+.git
+.cursor

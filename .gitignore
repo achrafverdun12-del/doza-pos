@@ -1,0 +1,9 @@
+node_modules/
+doza-pos.db
+doza-pos.db-shm
+doza-pos.db-wal
+data-dump.json
+check-meta.js
+dump-data.js
+.cursor/
+.env

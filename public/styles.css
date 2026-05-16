@@ -1,0 +1,121 @@
+:root {
+  color-scheme: dark;
+  --bg: #05070d;
+  --panel: #101727;
+  --panel-border: #1f2d4d;
+  --text: #ecf2ff;
+  --muted: #9cabcf;
+  --accent: #5de4c7;
+  --danger: #ff7878;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", Inter, sans-serif; }
+body { background: radial-gradient(circle at top left, #112043 0%, var(--bg) 45%); color: var(--text); padding: 16px; }
+.app { max-width: 1700px; margin: 0 auto; }
+
+h1 { font-size: 28px; }
+h2 { font-size: 20px; margin-bottom: 10px; }
+h3 { margin: 16px 0 8px; color: var(--muted); }
+.muted { color: var(--muted); }
+
+.panel { background: linear-gradient(180deg, #141d35 0%, var(--panel) 100%); border: 1px solid var(--panel-border); border-radius: 14px; padding: 14px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.clock { color: var(--accent); font-weight: 700; }
+.status-wrap { display: flex; gap: 8px; align-items: center; }
+.badge { border: 1px solid var(--panel-border); border-radius: 999px; padding: 6px 10px; }
+.badge.danger { border-color: var(--danger); color: var(--danger); }
+.badge.ok { border-color: var(--accent); color: var(--accent); }
+
+.auth-wrap { display: flex; gap: 10px; align-items: end; margin-bottom: 12px; flex-wrap: wrap; }
+.auth-wrap > div { display: flex; flex-direction: column; gap: 6px; }
+#sessionInfo { min-width: 220px; }
+
+.tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.tab { border: 1px solid var(--panel-border); background: #0f1627; color: var(--text); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+.tab.active { border-color: var(--accent); color: var(--accent); }
+.tab-page { display: none; }
+.tab-page.active { display: block; }
+
+.grid { display: grid; grid-template-columns: 2fr 1.2fr; gap: 14px; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+
+input, button, select { border-radius: 10px; border: 1px solid var(--panel-border); background: #0f1627; color: var(--text); padding: 10px; }
+button { cursor: pointer; }
+button.primary { background: linear-gradient(135deg, #26c7a8, #4aa4ff); color: #051019; border: none; font-weight: 700; }
+button.ghost { background: transparent; }
+button.danger { border-color: var(--danger); color: var(--danger); }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+.chip { padding: 6px 10px; border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; }
+.chip.active { border-color: var(--accent); color: var(--accent); }
+
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.menu-item, .cart-item, .list li, .inventory-row { border: 1px solid var(--panel-border); border-radius: 10px; padding: 10px; }
+.menu-item p { color: var(--muted); font-size: 13px; }
+.menu-item footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+
+.cart-items { max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.cart-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.qty-control { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
+.qty-control button { width: 28px; height: 28px; padding: 0; }
+
+.totals { border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); padding: 10px 0; margin: 10px 0; }
+.totals div { display: flex; justify-content: space-between; margin: 6px 0; }
+.totals .grand { font-size: 18px; }
+.cash-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+
+.kpis, .mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kpis article, .mini-grid article { border: 1px solid var(--panel-border); border-radius: 10px; padding: 8px; }
+.kpis p, .mini-grid p { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+
+.list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.row-actions { display: flex; gap: 8px; margin-top: 10px; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.inventory-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow: auto; }
+.inventory-row { display: grid; grid-template-columns: 1fr auto auto auto auto auto auto; gap: 8px; align-items: center; }
+
+.payment-method { margin-top: 6px; margin-bottom: 6px; display: flex; flex-direction: column; gap: 8px; }
+.clients-panel { border-top: 1px solid var(--panel-border); padding-top: 10px; margin-top: 10px; }
+.topup-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.topup-row input { flex: 1; }
+
+.menu-item .product-img { width: 100%; height: 92px; object-fit: cover; border-radius: 10px; margin-bottom: 8px; background: #0a1020; border: 1px solid var(--panel-border); }
+.menu-admin-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 10px; background: #0a1020; border: 1px solid var(--panel-border); }
+
+pre { white-space: pre-wrap; border: 1px solid var(--panel-border); border-radius: 10px; background: #0a1020; padding: 10px; margin: 10px 0; }
+dialog { margin: auto; width: min(600px, 90vw); background: #0d1322; border: none; border-radius: 14px; color: var(--text); }
+.thermal-receipt pre { font-family: "Consolas", "Courier New", monospace; font-size: 13px; line-height: 1.35; }
+
+@media (max-width: 1250px) {
+  .grid, .two-col { grid-template-columns: 1fr; }
+}
+
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .app, .tabs, .tab-page, .topbar, .auth-wrap, .row-actions { display: none !important; }
+  dialog { position: static; border: none; width: 80mm; color: #000; background: #fff; }
+  .thermal-receipt h3 { display: none; }
+  .thermal-receipt pre {
+    border: none;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    width: 72mm;
+  }
+}
+
+#fullscreenBtn {
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 8px;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  border-radius: 6px;
+  transition: 0.2s;
+}
+#fullscreenBtn:hover { color: var(--accent); border-color: var(--accent); }
