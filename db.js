@@ -9,7 +9,7 @@ async function createPool() {
   let raw = process.env.DATABASE_URL;
   if (!raw) throw new Error("DATABASE_URL not set");
   raw = raw.replace(/\?sslmode=\w+/i, "");
-  pool = new Pool({ connectionString: raw, max: 1, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
+  pool = new Pool({ connectionString: raw, max: 2, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
   await pool.query("SELECT 1");
   console.log("DB connected");
 }

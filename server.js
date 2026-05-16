@@ -270,32 +270,22 @@ app.get("/api/bootstrap", async (req, res) => {
 });
 
 app.get("/api/state", auth, async (req, res) => {
-  const result = await transaction(async (tx) => {
-    const menu = await getMenu();
-    const orders = await getOrders();
-    const shift = await getActiveShift();
-    const cashAudit = await getCashAudit();
-    const clients = await getClients();
-    const materials = await getMaterials();
-    const businessDate = await getCurrentBusinessDate();
-    const dayMaterials = await getDayMaterialSnapshots(businessDate);
-    const dayConsumptions = await getDayConsumptions(businessDate);
-    const staff = await all("SELECT id, name, role FROM staff ORDER BY name");
-    const normalizedShift = {
-      isOpen: !!shift?.is_open,
-      openedAt: shift?.opened_at,
-      closedAt: shift?.closed_at,
-      openingFloat: shift?.opening_float,
-      openedBy: shift?.opened_by
-    };
-    return {
-      staff, menu, orders, shift: normalizedShift, cashAudit, clients,
-      expectedCash: await expectedDrawerCash(shift), materials, businessDate,
-      dayMaterials, dayConsumptions,
-      shiftMaterials: dayMaterials, shiftConsumptions: dayConsumptions
-    };
+  const [menu, orders, shift, cashAudit, clients, materials, businessDate] = await Promise.all([
+    getMenu(), getOrders(), getActiveShift(), getCashAudit(), getClients(), getMaterials(), getCurrentBusinessDate()
+  ]);
+  const [dayMaterials, dayConsumptions] = await Promise.all([
+    getDayMaterialSnapshots(businessDate), getDayConsumptions(businessDate)
+  ]);
+  const staff = await all("SELECT id, name, role FROM staff ORDER BY name");
+  const normalizedShift = {
+    isOpen: !!shift?.is_open, openedAt: shift?.opened_at, closedAt: shift?.closed_at,
+    openingFloat: shift?.opening_float, openedBy: shift?.opened_by
+  };
+  return res.json({
+    staff, menu, orders, shift: normalizedShift, cashAudit, clients,
+    expectedCash: await expectedDrawerCash(shift), materials, businessDate,
+    dayMaterials, dayConsumptions, shiftMaterials: dayMaterials, shiftConsumptions: dayConsumptions
   });
-  return res.json(result);
 });
 
 // ---------- Shift ----------
