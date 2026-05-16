@@ -167,6 +167,10 @@ async function init() {
   }
 }
 
-const initPromise = init().catch(e => { console.error("DB init error:", e); process.exit(1); });
+let initError = null;
+const initPromise = init().catch(e => {
+  console.error("DB init error:", e);
+  initError = e;
+});
 
 module.exports = { all, get, run, transaction, pool, initPromise };

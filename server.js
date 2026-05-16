@@ -257,6 +257,7 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.get("/api/auth/me", auth, (req, res) => res.json({ user: req.user }));
 
+app.get("/health", (req, res) => res.json({ ok: true, vercel: !!process.env.VERCEL }));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "auth.html")));
 app.get("/auth", (req, res) => res.sendFile(path.join(__dirname, "public", "auth.html")));
 app.get("/pos", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
@@ -460,7 +461,7 @@ app.post("/api/orders", auth, requireRole("barista"), async (req, res) => {
 
 // ---------- Menu (admin) + images ----------
 const menuUploadDir = path.join(__dirname, "public", "uploads", "menu");
-fs.mkdirSync(menuUploadDir, { recursive: true });
+try { fs.mkdirSync(menuUploadDir, { recursive: true }); } catch {}
 const upload = multer({ dest: menuUploadDir, limits: { fileSize: 2 * 1024 * 1024 } });
 
 app.post("/api/menu", auth, requireRole("admin"), upload.single("image"), async (req, res) => {
@@ -1181,6 +1182,14 @@ app.delete("/api/admin/materials/stock-entry/:id", auth, requireRole("admin"), a
 
 // Fallback
 app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err?.stack || err);
+  res.status(500).json({ error: err?.message || "Internal error" });
+});
+
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => console.log(`Doza POS backend running on http://0.0.0.0:${PORT}`));
