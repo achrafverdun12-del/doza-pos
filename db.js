@@ -10,29 +10,43 @@ async function createPool() {
   const raw = process.env.DATABASE_URL;
   if (!raw) throw new Error("DATABASE_URL not set");
 
-  const url = new URL(raw);
+  const u = new URL(raw);
+  const dbname = u.pathname.replace(/^\//, "");
+  let host = u.hostname;
+  let port = parseInt(u.port || "5432", 10);
+  let resolved = false;
+
   try {
-    const ips = await dns.resolve6(url.hostname);
+    const ips = await dns.resolve6(host);
     if (ips.length > 0) {
-      url.hostname = `[${ips[0]}]`;
-      console.log("Resolved", raw.split("@")[1]?.split(":")[0] || "host", "->", ips[0]);
+      host = ips[0];
+      resolved = true;
+      console.log("Resolved (AAAA)", u.hostname, "->", host);
     }
   } catch (e) {
-    console.warn("DNS AAAA lookup failed, trying A:", e.message);
+    console.warn("DNS AAAA failed:", e.message);
+  }
+  if (!resolved) {
     try {
-      const ips = await dns.resolve4(url.hostname);
+      const ips = await dns.resolve4(host);
       if (ips.length > 0) {
-        url.hostname = ips[0];
-        console.log("Resolved (A)", raw.split("@")[1]?.split(":")[0] || "host", "->", ips[0]);
+        host = ips[0];
+        resolved = true;
+        console.log("Resolved (A)", u.hostname, "->", host);
       }
-    } catch (e2) {
-      console.warn("DNS A lookup also failed, using original hostname:", e2.message);
+    } catch (e) {
+      console.warn("DNS A failed:", e.message);
     }
   }
 
   pool = new Pool({
-    connectionString: url.toString(),
+    host,
+    port,
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: dbname,
     max: 1,
+    ssl: { rejectUnauthorized: false },
   });
   await pool.query("SELECT 1");
   console.log("DB connected");
