@@ -1,7 +1,6 @@
 const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const dns = require("dns").promises;
 
 let pool;
 let initError = null;
@@ -9,43 +8,9 @@ let initError = null;
 async function createPool() {
   const raw = process.env.DATABASE_URL;
   if (!raw) throw new Error("DATABASE_URL not set");
-  const u = new URL(raw);
-  const user = decodeURIComponent(u.username);
-  const password = decodeURIComponent(u.password);
-  const dbname = u.pathname.replace(/^\//, "");
-
-  const refMatch = u.hostname.match(/db\.(.+)\.supabase\.co$/);
-  const projectRef = refMatch ? refMatch[1] : null;
-
-  // Pooler hostname (IPv4) – fallback if direct connect fails
-  const poolerHost = "aws-0-eu-west-1.pooler.supabase.com";
-  const poolerPort = 5432;
-  const poolerUser = projectRef ? `${user}.${projectRef}` : user;
-
-  // Try direct connection first (IPv6 may work on some platforms)
-  pool = await tryConnect({ host: u.hostname, port: parseInt(u.port || "5432", 10), user, password, database: dbname })
-    .catch(e => {
-      console.warn("Direct connect failed:", e.code, e.message);
-      console.log("Falling back to pooler:", poolerUser + "@" + poolerHost);
-      return tryConnect({ host: poolerHost, port: poolerPort, user: poolerUser, password, database: dbname });
-    });
-
-  console.log("DB connected");
-}
-
-async function tryConnect(opts) {
-  const pool = new Pool({
-    host: opts.host,
-    port: opts.port,
-    user: opts.user,
-    password: opts.password,
-    database: opts.database,
-    max: 1,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 8000,
-  });
+  pool = new Pool({ connectionString: raw, max: 1, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 10000 });
   await pool.query("SELECT 1");
-  return pool;
+  console.log("DB connected");
 }
 
 function q(sql, params) {
