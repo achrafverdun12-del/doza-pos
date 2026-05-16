@@ -1363,9 +1363,11 @@ function bind() {
   el.tabs.forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
   el.loginBtn.addEventListener("click", login);
   el.logoutBtn.addEventListener("click", logout);
-  el.staffSelect.addEventListener("change", () => { el.staffPin.value = ""; });
+  let lastStaff = "";
+  el.staffSelect.addEventListener("change", () => { lastStaff = el.staffSelect.value; el.staffPin.value = ""; });
   el.staffPin.value = "";
   setTimeout(() => { el.staffPin.value = ""; }, 100);
+  setInterval(() => { if (lastStaff && el.staffSelect.value !== lastStaff) el.staffSelect.value = lastStaff; }, 200);
   el.fullscreenBtn.addEventListener("click", () => {
     if (document.fullscreenElement) {
       document.exitFullscreen();
