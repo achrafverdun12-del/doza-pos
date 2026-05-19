@@ -205,6 +205,7 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
   return transaction(async (tx) => {
     await tx.run("DELETE FROM day_consumptions WHERE business_date = ?", [businessDate]);
 
+    // Set material quantities from END inventory snapshots (what's physically left)
     const endSnaps = await tx.all(
       "SELECT material_id, counted_quantity FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = 'END'",
       [businessDate]
@@ -213,6 +214,8 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
       await tx.run("UPDATE materials SET quantity = ? WHERE id = ?", [Number(s.counted_quantity || 0), s.material_id]);
     }
 
+    // Record consumptions for tracking/cost purposes only — do NOT deduct again
+    // (END inventory already reflects what's left after consumption)
     let totalCost = 0;
     for (const c of consumptions) {
       const materialId = c.materialId;
@@ -227,8 +230,6 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
       const rowCost = qtyKg * costKg;
       totalCost += rowCost;
 
-      const newQty = Math.max(0, Number(mat.quantity || 0) - qtyKg);
-      await tx.run("UPDATE materials SET quantity = ? WHERE id = ?", [newQty, materialId]);
       await tx.run(
         "INSERT INTO day_consumptions (id, business_date, material_id, grams_used, quantity_kg, unit_cost_per_kg, total_cost, created_at, staff_id, staff_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [crypto.randomUUID(), businessDate, materialId, grams, qtyKg, costKg, rowCost, new Date().toISOString(), staff.id, staff.name]
@@ -805,13 +806,16 @@ app.get("/api/admin/pnl/summary", auth, requireRole("admin"), async (req, res) =
   for (let t = parseYYYYMMDD(yearStart); t <= parseYYYYMMDD(yearEnd); t.setUTCDate(t.getUTCDate() + 1)) {
     fixedYear += fixedExpenseForDay(formatYYYYMMDD(t), fixedDailyRows, fixedMonthlyRows);
   }
-  const expenseToday = fixedExpenseForDay(today, fixedDailyRows, fixedMonthlyRows) + manualExpToday + Number(consumptionToday);
-  const expenseMonth = fixedMonth + manualExpMonth + Number(consumptionMonth);
-  const expenseYear = fixedYear + manualExpYear + Number(consumptionYear);
+  const expenseToday = fixedExpenseForDay(today, fixedDailyRows, fixedMonthlyRows) + manualExpToday;
+  const expenseMonth = fixedMonth + manualExpMonth;
+  const expenseYear = fixedYear + manualExpYear;
+  const totalExpenseToday = expenseToday + Number(consumptionToday);
+  const totalExpenseMonth = expenseMonth + Number(consumptionMonth);
+  const totalExpenseYear = expenseYear + Number(consumptionYear);
   return res.json({
-    today: { revenue: Number(revenueToday), expense: Number(expenseToday), net: Number(revenueToday) - Number(expenseToday) },
-    month: { revenue: Number(revenueMonth), expense: Number(expenseMonth), net: Number(revenueMonth) - Number(expenseMonth) },
-    year: { revenue: Number(revenueYear), expense: Number(expenseYear), net: Number(revenueYear) - Number(expenseYear) }
+    today: { revenue: Number(revenueToday), expense: Number(expenseToday), consumption: Number(consumptionToday), totalExpense: Number(totalExpenseToday), net: Number(revenueToday) - Number(totalExpenseToday) },
+    month: { revenue: Number(revenueMonth), expense: Number(expenseMonth), consumption: Number(consumptionMonth), totalExpense: Number(totalExpenseMonth), net: Number(revenueMonth) - Number(totalExpenseMonth) },
+    year: { revenue: Number(revenueYear), expense: Number(expenseYear), consumption: Number(consumptionYear), totalExpense: Number(totalExpenseYear), net: Number(revenueYear) - Number(totalExpenseYear) }
   });
 });
 
@@ -852,8 +856,9 @@ app.get("/api/admin/pnl/range", auth, requireRole("admin"), async (req, res) => 
       const revCredit = ordersByDay[day]?.credit || 0;
       const revenue = revCash + revCredit;
       const manualExp = manualByDay[day] || 0;
-      const expense = fixedExpenseForDay(day, fixedDailyRows, fixedMonthlyRows) + manualExp + (consumptionByDay[day] || 0);
-      rows.push({ key: day, revenueCash: revCash, revenueCredit: revCredit, revenue, expense, net: revenue - expense });
+      const expense = fixedExpenseForDay(day, fixedDailyRows, fixedMonthlyRows) + manualExp;
+      const consumption = consumptionByDay[day] || 0;
+      rows.push({ key: day, revenueCash: revCash, revenueCredit: revCredit, revenue, expense, consumption, totalExpense: expense + consumption, net: revenue - expense - consumption });
     }
   } else if (period === "weekly") {
     const weekMap = {};
@@ -870,8 +875,9 @@ app.get("/api/admin/pnl/range", auth, requireRole("admin"), async (req, res) => 
     }
     Object.values(weekMap).sort((a, b) => (a.isoYear === b.isoYear ? a.week - b.week : a.isoYear - b.isoYear)).forEach((w) => {
       const revenue = w.revenueCash + w.revenueCredit;
-      const expense = w.fixed + w.manual + w.consumption;
-      rows.push({ key: `${w.isoYear}-W${String(w.week).padStart(2, "0")}`, revenueCash: w.revenueCash, revenueCredit: w.revenueCredit, revenue, expense, net: revenue - expense });
+      const expense = w.fixed + w.manual;
+      const consumption = w.consumption;
+      rows.push({ key: `${w.isoYear}-W${String(w.week).padStart(2, "0")}`, revenueCash: w.revenueCash, revenueCredit: w.revenueCredit, revenue, expense, consumption, totalExpense: expense + consumption, net: revenue - expense - consumption });
     });
   } else if (period === "monthly") {
     const monthMap = {};
@@ -889,8 +895,9 @@ app.get("/api/admin/pnl/range", auth, requireRole("admin"), async (req, res) => 
     }
     Object.values(monthMap).sort((a, b) => (a.year === b.year ? a.month - b.month : a.year - b.year)).forEach((mo) => {
       const revenue = mo.revenueCash + mo.revenueCredit;
-      const expense = mo.fixed + mo.manual + mo.consumption;
-      rows.push({ key: `${mo.year}-${String(mo.month).padStart(2, "0")}`, revenueCash: mo.revenueCash, revenueCredit: mo.revenueCredit, revenue, expense, net: revenue - expense });
+      const expense = mo.fixed + mo.manual;
+      const consumption = mo.consumption;
+      rows.push({ key: `${mo.year}-${String(mo.month).padStart(2, "0")}`, revenueCash: mo.revenueCash, revenueCredit: mo.revenueCredit, revenue, expense, consumption, totalExpense: expense + consumption, net: revenue - expense - consumption });
     });
   } else if (period === "yearly") {
     const yearMap = {};
@@ -908,8 +915,9 @@ app.get("/api/admin/pnl/range", auth, requireRole("admin"), async (req, res) => 
       const yr = Number(y);
       const obj = yearMap[yr];
       const revenue = obj.revenueCash + obj.revenueCredit;
-      const expense = obj.fixed + obj.manual + obj.consumption;
-      rows.push({ key: String(yr), revenueCash: obj.revenueCash, revenueCredit: obj.revenueCredit, revenue, expense, net: revenue - expense });
+      const expense = obj.fixed + obj.manual;
+      const consumption = obj.consumption;
+      rows.push({ key: String(yr), revenueCash: obj.revenueCash, revenueCredit: obj.revenueCredit, revenue, expense, consumption, totalExpense: expense + consumption, net: revenue - expense - consumption });
     });
   } else {
     return res.status(400).json({ error: "Invalid period" });
@@ -968,6 +976,15 @@ app.get("/api/admin/export/xlsx", auth, requireRole("admin"), async (req, res) =
     "SELECT business_date AS day, SUM(total_cost) AS expense FROM day_consumptions WHERE business_date BETWEEN ? AND ? GROUP BY business_date",
     [minDay, maxDay]
   )).forEach((r) => { byDayConsumption[r.day] = Number(r.expense); });
+  const byDayActualCash = {};
+  (await all(
+    "SELECT expense_date AS day, actual_cash, variance FROM cash_audit WHERE id = 1"
+  )).forEach((r) => { byDayActualCash[r.day] = { actualCash: Number(r.actual_cash || 0), variance: Number(r.variance || 0) }; });
+  const byDayOrderCount = {};
+  (await all(
+    "SELECT substr(created_at,1,10) AS day, COUNT(*) AS c FROM orders WHERE substr(created_at,1,10) BETWEEN ? AND ? GROUP BY day",
+    [minDay, maxDay]
+  )).forEach((r) => { byDayOrderCount[r.day] = Number(r.c || 0); });
   const dailyRows = [];
   for (let t = new Date(from); t <= to; t.setUTCDate(t.getUTCDate() + 1)) {
     const day = formatYYYYMMDD(t);
@@ -978,7 +995,11 @@ app.get("/api/admin/export/xlsx", auth, requireRole("admin"), async (req, res) =
     const consumptionExp = byDayConsumption[day] || 0;
     const fixedExp = fixedExpenseForDay(day, fixedDailyRows, fixedMonthlyRows);
     const expense = fixedExp + manualExp + consumptionExp;
-    dailyRows.push({ Date: day, Revenue_CASH: revCash, Revenue_CREDIT: revCredit, Revenue_Total: revenue, Fixed_Expense: fixedExp, Manual_Expense: manualExp, Consumption_Expense: consumptionExp, Expense_Total: expense, Net: revenue - expense });
+    const actualCash = byDayActualCash[day]?.actualCash || 0;
+    const variance = byDayActualCash[day]?.variance || 0;
+    const orderCount = byDayOrderCount[day] || 0;
+    const revenueUsed = actualCash > 0 ? Math.max(0, actualCash - 0) : revenue;
+    dailyRows.push({ Date: day, Orders: orderCount, Revenue_CASH_Theorique: revCash, Revenue_CREDIT: revCredit, Revenue_Theorique_Total: revenue, Caisse_Reelle: actualCash, Variance: variance, Revenue_Utilisee: revenueUsed, Fixed_Expense: fixedExp, Manual_Expense: manualExp, Consumption_Expense: consumptionExp, Expense_Total: expense, Net: revenueUsed - expense });
   }
   const weeklyMap = {};
   const monthlyMap = {};
@@ -986,9 +1007,12 @@ app.get("/api/admin/export/xlsx", auth, requireRole("admin"), async (req, res) =
   dailyRows.forEach((r) => {
     const dayDate = parseYYYYMMDD(r.Date);
     const iso = isoWeekKey(dayDate);
-    if (!weeklyMap[iso.key]) weeklyMap[iso.key] = { key: iso.key, revenueCash: 0, revenueCredit: 0, manual: 0, consumption: 0, fixed: 0, days: 0, isoYear: iso.isoYear, week: iso.week };
-    weeklyMap[iso.key].revenueCash += r.Revenue_CASH;
+    if (!weeklyMap[iso.key]) weeklyMap[iso.key] = { key: iso.key, revenueCash: 0, revenueCredit: 0, actualCash: 0, variance: 0, orders: 0, manual: 0, consumption: 0, fixed: 0, days: 0, isoYear: iso.isoYear, week: iso.week };
+    weeklyMap[iso.key].revenueCash += r.Revenue_CASH_Theorique;
     weeklyMap[iso.key].revenueCredit += r.Revenue_CREDIT;
+    weeklyMap[iso.key].actualCash += r.Caisse_Reelle;
+    weeklyMap[iso.key].variance += r.Variance;
+    weeklyMap[iso.key].orders += r.Orders;
     weeklyMap[iso.key].manual += r.Manual_Expense;
     weeklyMap[iso.key].consumption += r.Consumption_Expense || 0;
     weeklyMap[iso.key].fixed += r.Fixed_Expense || 0;
@@ -996,15 +1020,21 @@ app.get("/api/admin/export/xlsx", auth, requireRole("admin"), async (req, res) =
     const y = dayDate.getUTCFullYear();
     const m = dayDate.getUTCMonth() + 1;
     const mKey = `${y}-${String(m).padStart(2, "0")}`;
-    if (!monthlyMap[mKey]) monthlyMap[mKey] = { key: mKey, year: y, month: m, revenueCash: 0, revenueCredit: 0, manual: 0, consumption: 0, fixed: 0 };
-    monthlyMap[mKey].revenueCash += r.Revenue_CASH;
+    if (!monthlyMap[mKey]) monthlyMap[mKey] = { key: mKey, year: y, month: m, revenueCash: 0, revenueCredit: 0, actualCash: 0, variance: 0, orders: 0, manual: 0, consumption: 0, fixed: 0 };
+    monthlyMap[mKey].revenueCash += r.Revenue_CASH_Theorique;
     monthlyMap[mKey].revenueCredit += r.Revenue_CREDIT;
+    monthlyMap[mKey].actualCash += r.Caisse_Reelle;
+    monthlyMap[mKey].variance += r.Variance;
+    monthlyMap[mKey].orders += r.Orders;
     monthlyMap[mKey].manual += r.Manual_Expense;
     monthlyMap[mKey].consumption += r.Consumption_Expense || 0;
     monthlyMap[mKey].fixed += r.Fixed_Expense || 0;
-    if (!yearlyMap[y]) yearlyMap[y] = { key: String(y), year: y, revenueCash: 0, revenueCredit: 0, manual: 0, consumption: 0, fixed: 0 };
-    yearlyMap[y].revenueCash += r.Revenue_CASH;
+    if (!yearlyMap[y]) yearlyMap[y] = { key: String(y), year: y, revenueCash: 0, revenueCredit: 0, actualCash: 0, variance: 0, orders: 0, manual: 0, consumption: 0, fixed: 0 };
+    yearlyMap[y].revenueCash += r.Revenue_CASH_Theorique;
     yearlyMap[y].revenueCredit += r.Revenue_CREDIT;
+    yearlyMap[y].actualCash += r.Caisse_Reelle;
+    yearlyMap[y].variance += r.Variance;
+    yearlyMap[y].orders += r.Orders;
     yearlyMap[y].manual += r.Manual_Expense;
     yearlyMap[y].consumption += r.Consumption_Expense || 0;
     yearlyMap[y].fixed += r.Fixed_Expense || 0;
@@ -1012,17 +1042,20 @@ app.get("/api/admin/export/xlsx", auth, requireRole("admin"), async (req, res) =
   const weeklyRows = Object.values(weeklyMap).sort((a, b) => (a.isoYear === b.isoYear ? a.week - b.week : a.isoYear - b.isoYear)).map((w) => {
     const revenue = w.revenueCash + w.revenueCredit;
     const expense = w.fixed + w.manual + w.consumption;
-    return { Week: w.key, Revenue_CASH: w.revenueCash, Revenue_CREDIT: w.revenueCredit, Revenue_Total: revenue, Fixed_Expense: w.fixed, Manual_Expense: w.manual, Consumption_Expense: w.consumption, Expense_Total: expense, Net: revenue - expense };
+    const revenueUsed = w.actualCash > 0 ? Math.max(0, w.actualCash) : revenue;
+    return { Week: w.key, Orders: w.orders, Revenue_CASH_Theorique: w.revenueCash, Revenue_CREDIT: w.revenueCredit, Revenue_Theorique_Total: revenue, Caisse_Reelle: w.actualCash, Variance: w.variance, Revenue_Utilisee: revenueUsed, Fixed_Expense: w.fixed, Manual_Expense: w.manual, Consumption_Expense: w.consumption, Expense_Total: expense, Net: revenueUsed - expense };
   });
   const monthlyRows = Object.values(monthlyMap).sort((a, b) => (a.year === b.year ? a.month - b.month : a.year - b.year)).map((mo) => {
     const revenue = mo.revenueCash + mo.revenueCredit;
     const expense = mo.fixed + mo.manual + mo.consumption;
-    return { Month: mo.key, Revenue_CASH: mo.revenueCash, Revenue_CREDIT: mo.revenueCredit, Revenue_Total: revenue, Fixed_Expense: mo.fixed, Manual_Expense: mo.manual, Consumption_Expense: mo.consumption, Expense_Total: expense, Net: revenue - expense };
+    const revenueUsed = mo.actualCash > 0 ? Math.max(0, mo.actualCash) : revenue;
+    return { Month: mo.key, Orders: mo.orders, Revenue_CASH_Theorique: mo.revenueCash, Revenue_CREDIT: mo.revenueCredit, Revenue_Theorique_Total: revenue, Caisse_Reelle: mo.actualCash, Variance: mo.variance, Revenue_Utilisee: revenueUsed, Fixed_Expense: mo.fixed, Manual_Expense: mo.manual, Consumption_Expense: mo.consumption, Expense_Total: expense, Net: revenueUsed - expense };
   });
   const yearlyRows = Object.values(yearlyMap).sort((a, b) => a.year - b.year).map((yr) => {
     const revenue = yr.revenueCash + yr.revenueCredit;
     const expense = yr.fixed + yr.manual + yr.consumption;
-    return { Year: yr.key, Revenue_CASH: yr.revenueCash, Revenue_CREDIT: yr.revenueCredit, Revenue_Total: revenue, Fixed_Expense: yr.fixed, Manual_Expense: yr.manual, Consumption_Expense: yr.consumption, Expense_Total: expense, Net: revenue - expense };
+    const revenueUsed = yr.actualCash > 0 ? Math.max(0, yr.actualCash) : revenue;
+    return { Year: yr.key, Orders: yr.orders, Revenue_CASH_Theorique: yr.revenueCash, Revenue_CREDIT: yr.revenueCredit, Revenue_Theorique_Total: revenue, Caisse_Reelle: yr.actualCash, Variance: yr.variance, Revenue_Utilisee: revenueUsed, Fixed_Expense: yr.fixed, Manual_Expense: yr.manual, Consumption_Expense: yr.consumption, Expense_Total: expense, Net: revenueUsed - expense };
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dailyRows), "Daily");
@@ -1043,19 +1076,24 @@ app.get("/api/admin/pnl/shifts-history", auth, requireRole("admin"), async (req,
     const consRow = await get("SELECT COALESCE(SUM(total_cost),0) AS c FROM day_consumptions WHERE business_date = ?", [day]);
     const cashRevenue = Number(cashRevRow?.r || 0);
     const consumptionCost = Number(consRow?.c || 0);
+    const auditRow = await get("SELECT actual_cash, variance FROM cash_audit WHERE id = 1");
+    const actualCash = Number(auditRow?.actual_cash || 0);
+    const variance = Number(auditRow?.variance || 0);
+    const revenueUsed = actualCash > 0 ? Math.max(0, actualCash) : cashRevenue;
     return {
       shiftId: `DAY-${idx + 1}`,
       openedAt: `${day}T00:00:00.000Z`,
       closedAt: `${day}T23:59:59.999Z`,
       openedBy: "JOUR", day,
-      cashRevenue, consumptionCost,
-      net: cashRevenue - consumptionCost
+      cashRevenue, actualCash, variance, consumptionCost,
+      net: revenueUsed - consumptionCost
     };
   }));
   const today = await getCurrentBusinessDate();
   const todayRows = rows.filter((r) => r.day === today);
   const todayPnl = {
     cashRevenue: todayRows.reduce((s, r) => s + r.cashRevenue, 0),
+    actualCash: todayRows.reduce((s, r) => s + r.actualCash, 0),
     consumptionCost: todayRows.reduce((s, r) => s + r.consumptionCost, 0),
     net: todayRows.reduce((s, r) => s + r.net, 0)
   };
