@@ -205,17 +205,19 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
   return transaction(async (tx) => {
     await tx.run("DELETE FROM day_consumptions WHERE business_date = ?", [businessDate]);
 
-    // Set material quantities from END inventory snapshots (what's physically left)
+    // Only update material quantities from END inventory if user actually entered them
     const endSnaps = await tx.all(
       "SELECT material_id, counted_quantity FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = 'END'",
       [businessDate]
     );
-    for (const s of endSnaps) {
-      await tx.run("UPDATE materials SET quantity = ? WHERE id = ?", [Number(s.counted_quantity || 0), s.material_id]);
+    // Only apply END inventory if at least one material was counted
+    if (endSnaps.length > 0) {
+      for (const s of endSnaps) {
+        await tx.run("UPDATE materials SET quantity = ? WHERE id = ?", [Number(s.counted_quantity || 0), s.material_id]);
+      }
     }
 
-    // Record consumptions for tracking/cost purposes only — do NOT deduct again
-    // (END inventory already reflects what's left after consumption)
+    // Record consumptions for tracking/cost purposes only
     let totalCost = 0;
     for (const c of consumptions) {
       const materialId = c.materialId;
