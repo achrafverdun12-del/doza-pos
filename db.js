@@ -68,10 +68,9 @@ async function init() {
   const uuidCroissant = crypto.randomUUID();
   const uuidPainChoco = crypto.randomUUID();
 
-  // Helper: execute statements in chunks in parallel (Turso batch may hang with large payloads)
   async function execMany(list) {
-    for (let i = 0; i < list.length; i += 10) {
-      await Promise.all(list.slice(i, i + 10).map(s => client.execute(s)));
+    for (const sql of list) {
+      await client.execute(sql);
     }
   }
 
