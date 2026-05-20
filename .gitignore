@@ -7,3 +7,5 @@ check-meta.js
 dump-data.js
 .cursor/
 .env
+
+.vercel

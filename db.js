@@ -15,9 +15,13 @@ async function createTursoClient() {
   console.log("Turso DB connected");
 }
 
-async function all(sql, params) {
-  if (!client) await initPromise;
+async function ensureInit() {
+  await initPromise;
   if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
+}
+
+async function all(sql, params) {
+  await ensureInit();
   const rs = await client.execute({ sql, args: params || [] });
   return rs.rows;
 }
@@ -28,15 +32,13 @@ async function get(sql, params) {
 }
 
 async function run(sql, params) {
-  if (!client) await initPromise;
-  if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
+  await ensureInit();
   const rs = await client.execute({ sql, args: params || [] });
   return { changes: rs.rowsAffected };
 }
 
 async function transaction(fn) {
-  if (!client) await initPromise;
-  if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
+  await ensureInit();
   const txObj = await client.transaction("write");
   try {
     const tx = {
