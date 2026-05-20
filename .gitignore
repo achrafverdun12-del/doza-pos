@@ -9,3 +9,6 @@ dump-data.js
 .env
 
 .vercel
+
+auth
+auth-wal
