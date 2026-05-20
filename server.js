@@ -49,6 +49,18 @@ function requireRole(minRole) {
   };
 }
 
+const queryCache = new Map();
+function cached(key, ttlMs, fetchFn) {
+  const now = Date.now();
+  const entry = queryCache.get(key);
+  if (entry && entry.expiry > now) return entry.data;
+  return fetchFn().then(data => {
+    queryCache.set(key, { data, expiry: Date.now() + ttlMs });
+    return data;
+  });
+}
+function invalidateCache(...keys) { for (const k of keys) queryCache.delete(k); }
+
 async function getActiveShift() {
   return get("SELECT * FROM shifts ORDER BY id DESC LIMIT 1");
 }
@@ -58,15 +70,15 @@ async function getCashAudit() {
 }
 
 async function getMenu() {
-  return all("SELECT * FROM menu_items ORDER BY name");
+  return cached("menu", 30000, () => all("SELECT * FROM menu_items ORDER BY name"));
 }
 
 async function getClients() {
-  return all("SELECT id, name, credit_line, balance, (credit_line + balance) AS available FROM clients ORDER BY name");
+  return cached("clients", 30000, () => all("SELECT id, name, credit_line, balance, (credit_line + balance) AS available FROM clients ORDER BY name"));
 }
 
 async function getMaterials() {
-  return all("SELECT * FROM materials ORDER BY name");
+  return cached("materials", 30000, () => all("SELECT * FROM materials ORDER BY name"));
 }
 
 function formatBusinessDate(d) {
@@ -101,7 +113,15 @@ async function getOrders(limit = 300) {
     ORDER BY created_at DESC
     LIMIT ?
   `, [limit]);
-  return await Promise.all(orders.map(async (o) => ({
+  if (orders.length === 0) return [];
+  const ids = orders.map(o => o.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const allItems = await all(`SELECT order_id, item_id as id, item_name as name, price, qty FROM order_items WHERE order_id IN (${placeholders})`, ids);
+  const itemsByOrder = {};
+  for (const it of allItems) {
+    (itemsByOrder[it.order_id] = itemsByOrder[it.order_id] || []).push({ id: it.id, name: it.name, price: it.price, qty: it.qty });
+  }
+  return orders.map(o => ({
     id: o.id,
     createdAt: o.created_at,
     subtotal: o.subtotal,
@@ -115,21 +135,19 @@ async function getOrders(limit = 300) {
     staffId: o.staff_id,
     staffName: o.staff_name,
     shiftOpenedAt: o.shift_opened_at,
-    items: await all("SELECT item_id as id, item_name as name, price, qty FROM order_items WHERE order_id = ?", [o.id])
-  })));
+    items: itemsByOrder[o.id] || []
+  }));
 }
 
 async function expectedDrawerCash(shift) {
   if (!shift || !shift.opened_at) return 0;
-  const cashFromOrders = await get(
-    "SELECT COALESCE(SUM(total), 0) AS cashFromOrders FROM orders WHERE shift_opened_at = ? AND payment_method = 'CASH'",
-    [shift.opened_at]
-  );
-  const cashFromTopups = await get(
-    "SELECT COALESCE(SUM(cash_amount), 0) AS cashFromTopups FROM client_ledger WHERE shift_opened_at = ? AND type = 'TOP_UP'",
-    [shift.opened_at]
-  );
-  return Number(shift.opening_float) + Number(cashFromOrders?.cashfromorders || 0) + Number(cashFromTopups?.cashfromtopups || 0);
+  const r = await get(`
+    SELECT COALESCE(SUM(o.total), 0) + COALESCE(SUM(cl.cash_amount), 0) AS total
+    FROM (SELECT 1 AS dummy) d
+    LEFT JOIN orders o ON o.shift_opened_at = ? AND o.payment_method = 'CASH'
+    LEFT JOIN client_ledger cl ON cl.shift_opened_at = ? AND cl.type = 'TOP_UP'
+  `, [shift.opened_at, shift.opened_at]);
+  return Number(shift.opening_float) + Number(r?.total || 0);
 }
 
 async function getDayMaterialSnapshots(businessDate) {
@@ -494,6 +512,7 @@ app.post("/api/menu", auth, requireRole("admin"), upload.single("image"), async 
   const image_path = req.file ? `/uploads/menu/${path.basename(req.file.path)}` : null;
   await run("INSERT INTO menu_items (id, name, category, price, stock, image_path) VALUES (?, ?, ?, ?, 0, ?)",
     [id, String(name).trim(), String(category).trim(), p, image_path]);
+  invalidateCache("menu");
   broadcastStateChange("MENU_ITEM_CREATED", { itemId: id, by: req.user.name });
   return res.json({ ok: true, id });
 });
@@ -501,12 +520,14 @@ app.post("/api/menu", auth, requireRole("admin"), upload.single("image"), async 
 app.delete("/api/menu/:id", auth, requireRole("admin"), async (req, res) => {
   const result = await run("DELETE FROM menu_items WHERE id = ?", [req.params.id]);
   if (result.changes === 0) return res.status(404).json({ error: "Item not found" });
+  invalidateCache("menu");
   broadcastStateChange("MENU_ITEM_DELETED", { itemId: req.params.id, by: req.user.name });
   return res.json({ ok: true });
 });
 
 app.delete("/api/menu", auth, requireRole("admin"), async (req, res) => {
   await run("DELETE FROM menu_items");
+  invalidateCache("menu");
   broadcastStateChange("MENU_CLEARED", { by: req.user.name });
   return res.json({ ok: true });
 });
@@ -521,6 +542,7 @@ app.post("/api/clients", auth, requireRole("admin"), async (req, res) => {
   const id = crypto.randomUUID();
   await run("INSERT INTO clients (id, name, credit_line, balance, created_at) VALUES (?, ?, ?, ?, ?)",
     [id, n, line, starting, new Date().toISOString()]);
+  invalidateCache("clients");
   broadcastStateChange("CLIENT_CREATED", { clientId: id, by: req.user.name });
   return res.json({ ok: true, id });
 });
@@ -530,6 +552,7 @@ app.patch("/api/clients/:id/credit-line", auth, requireRole("admin"), async (req
   if (Number.isNaN(line) || line < 0) return res.status(400).json({ error: "Invalid creditLine" });
   const result = await run("UPDATE clients SET credit_line = ? WHERE id = ?", [line, req.params.id]);
   if (result.changes === 0) return res.status(404).json({ error: "Client not found" });
+  invalidateCache("clients");
   broadcastStateChange("CLIENT_CREDIT_LINE_UPDATED", { clientId: req.params.id, by: req.user.name });
   return res.json({ ok: true });
 });
@@ -539,6 +562,7 @@ app.patch("/api/clients/:id/balance", auth, requireRole("admin"), async (req, re
   if (Number.isNaN(b)) return res.status(400).json({ error: "Invalid balance" });
   const result = await run("UPDATE clients SET balance = ? WHERE id = ?", [b, req.params.id]);
   if (result.changes === 0) return res.status(404).json({ error: "Client not found" });
+  invalidateCache("clients");
   broadcastStateChange("CLIENT_BALANCE_UPDATED", { clientId: req.params.id, by: req.user.name });
   return res.json({ ok: true });
 });
@@ -547,6 +571,7 @@ app.delete("/api/clients/:id", auth, requireRole("admin"), async (req, res) => {
   await run("DELETE FROM client_ledger WHERE client_id = ?", [req.params.id]);
   const result = await run("DELETE FROM clients WHERE id = ?", [req.params.id]);
   if (result.changes === 0) return res.status(404).json({ error: "Client not found" });
+  invalidateCache("clients");
   broadcastStateChange("CLIENT_DELETED", { clientId: req.params.id, by: req.user.name });
   return res.json({ ok: true });
 });
@@ -586,6 +611,7 @@ app.post("/api/materials", auth, requireRole("admin"), async (req, res) => {
   const id = crypto.randomUUID();
   await run("INSERT INTO materials (id, name, unit, quantity, cost_per_kg, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     [id, n, u, q, cost, new Date().toISOString()]);
+  invalidateCache("materials");
   broadcastStateChange("MATERIAL_CREATED", { materialId: id, by: req.user.name });
   return res.json({ ok: true, id });
 });
@@ -596,6 +622,7 @@ app.patch("/api/materials/:id", auth, requireRole("admin"), async (req, res) => 
   if (Number.isNaN(q) || q < 0 || Number.isNaN(cost) || cost < 0) return res.status(400).json({ error: "Invalid material values" });
   const result = await run("UPDATE materials SET quantity = ?, cost_per_kg = ? WHERE id = ?", [q, cost, req.params.id]);
   if (result.changes === 0) return res.status(404).json({ error: "Material not found" });
+  invalidateCache("materials");
   broadcastStateChange("MATERIAL_UPDATED", { materialId: req.params.id, by: req.user.name });
   return res.json({ ok: true });
 });
@@ -604,6 +631,7 @@ app.delete("/api/materials/:id", auth, requireRole("admin"), async (req, res) =>
   const result = await run("DELETE FROM materials WHERE id = ?", [req.params.id]);
   if (result.changes === 0) return res.status(404).json({ error: "Material not found" });
   await run("DELETE FROM shift_material_snapshots WHERE material_id = ?", [req.params.id]);
+  invalidateCache("materials");
   broadcastStateChange("MATERIAL_DELETED", { materialId: req.params.id, by: req.user.name });
   return res.json({ ok: true });
 });

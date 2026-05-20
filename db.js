@@ -74,7 +74,16 @@ async function init() {
   });
 }
 
+async function schemaExists() {
+  const r = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='menu_items'");
+  return r.rows.length > 0;
+}
+
 async function fullInit() {
+  if (await schemaExists()) {
+    console.log("Schema exists, skipping full init");
+    return;
+  }
   const uuid = () => crypto.randomUUID();
   const today = new Date().toISOString().slice(0, 10);
 
