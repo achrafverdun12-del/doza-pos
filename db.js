@@ -1,5 +1,4 @@
 const { createClient } = require("@libsql/client");
-const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
 let client;
@@ -55,20 +54,23 @@ async function transaction(fn) {
   }
 }
 
-async function execMany(sqlStatements) {
-  if (!client) await initPromise;
-  if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
-  const t = Date.now();
-  for (const sql of sqlStatements) {
-    await client.execute(sql);
-  }
-  console.log("execMany (%d statements) took %dms", sqlStatements.length, Date.now() - t);
-}
-
 async function init() {
   await createTursoClient();
 
-  await execMany([
+  const today = new Date().toISOString().slice(0, 10);
+  // Build UUIDs synchronously before batch
+  const uuidEspresso = crypto.randomUUID();
+  const uuidCappuccino = crypto.randomUUID();
+  const uuidFlatWhite = crypto.randomUUID();
+  const uuidColdBrew = crypto.randomUUID();
+  const uuidIcedLatte = crypto.randomUUID();
+  const uuidMatchaLatte = crypto.randomUUID();
+  const uuidCroissant = crypto.randomUUID();
+  const uuidPainChoco = crypto.randomUUID();
+
+  // Single batch: schema + seed data (INSERT OR IGNORE so runs safely every cold start)
+  await client.batch([
+    // --- CREATE TABLES ---
     `CREATE TABLE IF NOT EXISTS staff (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, pin_hash TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL, stock INTEGER NOT NULL, image_path TEXT)`,
     `CREATE TABLE IF NOT EXISTS shifts (id INTEGER PRIMARY KEY AUTOINCREMENT, is_open INTEGER NOT NULL DEFAULT 0, opened_at TEXT, closed_at TEXT, opening_float REAL NOT NULL DEFAULT 0, opened_by TEXT)`,
@@ -87,9 +89,7 @@ async function init() {
     `CREATE TABLE IF NOT EXISTS stock_entries (id TEXT PRIMARY KEY, material_id TEXT NOT NULL, quantity_added REAL NOT NULL, cost_per_kg REAL NOT NULL, total_cost REAL NOT NULL, created_at TEXT NOT NULL, staff_id TEXT NOT NULL, staff_name TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS day_consumptions (id TEXT PRIMARY KEY, business_date TEXT NOT NULL, material_id TEXT NOT NULL, grams_used REAL NOT NULL, quantity_kg REAL NOT NULL, unit_cost_per_kg REAL NOT NULL, total_cost REAL NOT NULL, created_at TEXT NOT NULL, staff_id TEXT NOT NULL, staff_name TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
-  ]);
-
-  await execMany([
+    // --- CREATE INDEXES ---
     `CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_shift_opened_at ON orders(shift_opened_at)`,
     `CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)`,
@@ -98,15 +98,42 @@ async function init() {
     `CREATE INDEX IF NOT EXISTS idx_expenses_ledger_date ON expenses_ledger(expense_date)`,
     `CREATE INDEX IF NOT EXISTS idx_stock_entries_created_at ON stock_entries(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_client_ledger_order_id ON client_ledger(order_id)`,
-  ]);
+    // --- SEED STAFF (INSERT OR IGNORE) ---
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('u1', 'Nadia', 'cashier', '$2b$04$4L5O15QQurgHdBt4Y82EQu/D/N4BbwazxQms4abqtWWZH5N/eGyE2')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('u2', 'Youssef', 'manager', '$2b$04$paBn0Sxq1davyTO17f6p..LMKLYAbNTsCvEXTndzRUfEYoqIfkcdS')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('u3', 'Admin', 'admin', '$2b$04$CMZKlmtelrkAGlVLixLMsu/9AaA4cHY6GaL/fnjnGjx1kIf9xOXji')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('BARISTA 1', 'YASSINE', 'barista', '$2b$10$RKrVEcbZWLcXfI.r0VDQXueOcF/XFfnSVJoCFevKqbK6qTLlnA0ZK')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('CHEF', 'REDA', 'admin', '$2b$10$dk4XbF9KFset1aXJF1fQ2Owr5Pg3Miwy.w/k/89joMOTJElqccahO')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('CHEF 2', 'AHMED', 'admin', '$2b$10$1p0CaIoR0d0Sh4n6ptQx0ehE7KNsY2hYuh.UlAbWjaAdbAiRbGDu.')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('DOZACOFFEE', 'Doza Cloud Admin', 'admin', '$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy')`,
+    // --- SEED MENU ---
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidEspresso}', 'Espresso', 'Coffee', 16, 60)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidCappuccino}', 'Cappuccino', 'Coffee', 24, 50)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidFlatWhite}', 'Flat White', 'Coffee', 26, 40)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidColdBrew}', 'Cold Brew', 'Cold', 27, 35)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidIcedLatte}', 'Iced Latte', 'Cold', 28, 28)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidMatchaLatte}', 'Matcha Latte', 'Special', 32, 20)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidCroissant}', 'Croissant', 'Bakery', 18, 30)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidPainChoco}', 'Pain au Chocolat', 'Bakery', 21, 24)`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock, image_path) VALUES ('e5478de3-c0f3-4fe2-9fa9-04bfc3467506', 'ARABICA', 'CAFE', 8, 0, '/uploads/menu/8330cf28a7b1bb57e8fce8ce92e91617')`,
+    `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock, image_path) VALUES ('ce0c3968-8ed4-468e-ab1c-f83719643176', 'SPECIAL', 'CAFE', 6, 0, '/uploads/menu/4781b1b0275104f1420abf56c7d70b83')`,
+    // --- SEED SHIFT & CASH AUDIT ---
+    `INSERT OR IGNORE INTO shifts (id, is_open, opened_at, closed_at, opening_float, opened_by) VALUES (1, 0, NULL, NULL, 0, NULL)`,
+    `INSERT OR IGNORE INTO cash_audit (id, actual_cash, variance) VALUES (1, 0, 0)`,
+    // --- LEGACY MATERIALS ---
+    `INSERT OR IGNORE INTO materials (id, name, unit, quantity, created_at, cost_per_kg) VALUES ('c876e2eb-12ca-4623-885c-4e0292554c1f', 'SPECIAL', 'kg', 0, '${today}', 116.66)`,
+    `INSERT OR IGNORE INTO materials (id, name, unit, quantity, created_at, cost_per_kg) VALUES ('dc084abc-12e4-4683-8c25-0e7e74d48c28', 'ARABICA', 'kg', 0, '${today}', 164)`,
+    // --- META FLAG ---
+    `INSERT OR IGNORE INTO meta (key, value) VALUES ('menu_defaults_removed_v1', '1')`,
+    // --- UPDATES ---
+    `UPDATE staff SET pin_hash = '$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy' WHERE id = 'DOZACOFFEE'`,
+    `UPDATE fixed_expenses_daily SET start_date = '${today}' WHERE start_date IS NULL`,
+    `UPDATE fixed_expenses_monthly SET start_date = '${today}' WHERE start_date IS NULL`,
+  ], "write");
 
-  const today = new Date().toISOString().slice(0, 10);
-  await run("UPDATE fixed_expenses_daily SET start_date = ? WHERE start_date IS NULL OR TRIM(start_date) = ''", [today]);
-  await run("UPDATE fixed_expenses_monthly SET start_date = ? WHERE start_date IS NULL OR TRIM(start_date) = ''", [today]);
-
-  // Migrate day_consumptions from old shift_consumptions table (if old table has data)
-  const dc = await get("SELECT COUNT(*) AS c FROM day_consumptions");
-  if (Number(dc?.c) === 0) {
+  // Migrate day_consumptions from old shift_consumptions (if data exists — only on legacy DB)
+  const dcCount = await get("SELECT COUNT(*) AS c FROM day_consumptions");
+  if (Number(dcCount?.c) === 0) {
     const scCount = await get("SELECT COUNT(*) AS c FROM shift_consumptions");
     if (Number(scCount?.c) > 0) {
       try {
@@ -120,84 +147,6 @@ async function init() {
       } catch { }
     }
   }
-
-  // Seed default staff
-  const sc = await get("SELECT COUNT(*) AS c FROM staff");
-  if (Number(sc?.c) === 0) {
-    const users = [
-      { id: "u1", name: "Nadia", role: "cashier", pin: "1111" },
-      { id: "u2", name: "Youssef", role: "manager", pin: "2222" },
-      { id: "u3", name: "Admin", role: "admin", pin: "9999" },
-    ];
-    for (const u of users) {
-      await run("INSERT INTO staff (id, name, role, pin_hash) VALUES (?, ?, ?, ?)", [u.id, u.name, u.role, bcrypt.hashSync(u.pin, 4)]);
-    }
-  }
-
-  // Seed default menu
-  const mc = await get("SELECT COUNT(*) AS c FROM menu_items");
-  if (Number(mc?.c) === 0) {
-    const menu = [
-      { id: crypto.randomUUID(), name: "Espresso", category: "Coffee", price: 16, stock: 60 },
-      { id: crypto.randomUUID(), name: "Cappuccino", category: "Coffee", price: 24, stock: 50 },
-      { id: crypto.randomUUID(), name: "Flat White", category: "Coffee", price: 26, stock: 40 },
-      { id: crypto.randomUUID(), name: "Cold Brew", category: "Cold", price: 27, stock: 35 },
-      { id: crypto.randomUUID(), name: "Iced Latte", category: "Cold", price: 28, stock: 28 },
-      { id: crypto.randomUUID(), name: "Matcha Latte", category: "Special", price: 32, stock: 20 },
-      { id: crypto.randomUUID(), name: "Croissant", category: "Bakery", price: 18, stock: 30 },
-      { id: crypto.randomUUID(), name: "Pain au Chocolat", category: "Bakery", price: 21, stock: 24 },
-    ];
-    for (const m of menu) {
-      await run("INSERT INTO menu_items (id, name, category, price, stock) VALUES (?, ?, ?, ?, ?)", [m.id, m.name, m.category, m.price, m.stock]);
-    }
-  }
-
-  // Seed default shift and cash audit
-  const shc = await get("SELECT COUNT(*) AS c FROM shifts");
-  if (Number(shc?.c) === 0) {
-    await run("INSERT INTO shifts (is_open, opened_at, closed_at, opening_float, opened_by) VALUES (0, NULL, NULL, 0, NULL)");
-  }
-  const ac = await get("SELECT COUNT(*) AS c FROM cash_audit");
-  if (Number(ac?.c) === 0) {
-    await run("INSERT INTO cash_audit (id, actual_cash, variance) VALUES (1, 0, 0)");
-  }
-
-  // Legacy migration: add specific staff/menu/materials from old production DB
-  const metaCheck = await get("SELECT value FROM meta WHERE key = 'menu_defaults_removed_v1'");
-  if (!metaCheck) {
-    await run("INSERT INTO meta (key, value) VALUES ('menu_defaults_removed_v1', '1')");
-
-    for (const s of [
-      { id: "BARISTA 1", name: "YASSINE", role: "barista", pin_hash: "$2b$10$RKrVEcbZWLcXfI.r0VDQXueOcF/XFfnSVJoCFevKqbK6qTLlnA0ZK" },
-      { id: "CHEF", name: "REDA", role: "admin", pin_hash: "$2b$10$dk4XbF9KFset1aXJF1fQ2Owr5Pg3Miwy.w/k/89joMOTJElqccahO" },
-      { id: "CHEF 2", name: "AHMED", role: "admin", pin_hash: "$2b$10$1p0CaIoR0d0Sh4n6ptQx0ehE7KNsY2hYuh.UlAbWjaAdbAiRbGDu." },
-      { id: "DOZACOFFEE", name: "Doza Cloud Admin", role: "admin", pin_hash: "$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy" },
-    ]) {
-      const existing = await get("SELECT id FROM staff WHERE id = ?", [s.id]);
-      if (!existing) await run("INSERT INTO staff (id, name, role, pin_hash) VALUES (?, ?, ?, ?)", [s.id, s.name, s.role, s.pin_hash]);
-    }
-
-    for (const m of [
-      { id: "c876e2eb-12ca-4623-885c-4e0292554c1f", name: "SPECIAL", unit: "kg", quantity: 0, cost_per_kg: 116.66 },
-      { id: "dc084abc-12e4-4683-8c25-0e7e74d48c28", name: "ARABICA", unit: "kg", quantity: 0, cost_per_kg: 164 },
-    ]) {
-      const existing = await get("SELECT id FROM materials WHERE id = ?", [m.id]);
-      if (!existing) await run("INSERT INTO materials (id, name, unit, quantity, created_at, cost_per_kg) VALUES (?, ?, ?, ?, ?, ?)",
-        [m.id, m.name, m.unit, m.quantity, new Date().toISOString(), m.cost_per_kg]);
-    }
-
-    for (const mi of [
-      { id: "e5478de3-c0f3-4fe2-9fa9-04bfc3467506", name: "ARABICA", category: "CAFE", price: 8, stock: 0, image_path: "/uploads/menu/8330cf28a7b1bb57e8fce8ce92e91617" },
-      { id: "ce0c3968-8ed4-468e-ab1c-f83719643176", name: "SPECIAL", category: "CAFE", price: 6, stock: 0, image_path: "/uploads/menu/4781b1b0275104f1420abf56c7d70b83" },
-    ]) {
-      const existing = await get("SELECT id FROM menu_items WHERE id = ?", [mi.id]);
-      if (!existing) await run("INSERT INTO menu_items (id, name, category, price, stock, image_path) VALUES (?, ?, ?, ?, ?, ?)",
-        [mi.id, mi.name, mi.category, mi.price, mi.stock, mi.image_path]);
-    }
-  }
-
-  // Fix DOZACOFFEE password hash
-  await run("UPDATE staff SET pin_hash = ? WHERE id = 'DOZACOFFEE'", ["$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy"]);
 }
 
 const initPromise = init().catch(e => {
