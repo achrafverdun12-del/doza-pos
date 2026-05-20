@@ -56,11 +56,8 @@ async function transaction(fn) {
 }
 
 async function execMany(sqlStatements) {
-  if (!client) await initPromise;
-  if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
-  for (const sql of sqlStatements) {
-    await client.execute(sql);
-  }
+  await ensureInit();
+  await client.batch(sqlStatements);
 }
 
 async function init() {
