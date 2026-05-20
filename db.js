@@ -58,7 +58,11 @@ async function transaction(fn) {
 async function execMany(sqlStatements) {
   if (!client) await initPromise;
   if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
-  await client.executeMultiple(sqlStatements.join(";"));
+  const t = Date.now();
+  for (const sql of sqlStatements) {
+    await client.execute(sql);
+  }
+  console.log("execMany (%d statements) took %dms", sqlStatements.length, Date.now() - t);
 }
 
 async function init() {
