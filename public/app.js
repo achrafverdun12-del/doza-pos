@@ -425,9 +425,20 @@ async function loadAdminShiftPnlHistory() {
 }
 
 let pollTimer = null;
+let ordersRefreshTimer = null;
+
+async function refreshFullOrders() {
+  if (!isAdmin()) return;
+  try {
+    const data = await api("/api/orders/all");
+    state.orders = data.orders || [];
+  } catch { }
+}
 
 function bindRealtime() {
   clearInterval(pollTimer);
+  clearInterval(ordersRefreshTimer);
+  // Lightweight polling: small payload every 30s
   pollTimer = setInterval(async () => {
     if (!state.token) return;
     try {
@@ -435,7 +446,14 @@ function bindRealtime() {
     } catch {
       // Ignore transient failures
     }
-  }, 3000);
+  }, 30000);
+  // Full orders: only fetched when admin, less frequently
+  ordersRefreshTimer = setInterval(async () => {
+    if (!state.token) return;
+    try {
+      await refreshFullOrders();
+    } catch { }
+  }, 60000);
 }
 
 function setPaymentModeUI() {
@@ -1559,6 +1577,8 @@ async function init() {
       await refreshServerState();
       const me = await api("/api/auth/me");
       state.session = me.user;
+      // Fetch full orders once on load
+      await refreshFullOrders();
     } catch {
       state.token = "";
       sessionStorage.removeItem("doza-token");

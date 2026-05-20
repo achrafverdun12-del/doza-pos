@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
 const crypto = require("crypto");
+const compression = require("compression");
 const PDFDocument = require("pdfkit");
 const XLSX = require("xlsx");
 const { all, get, run, transaction } = require("./db");
@@ -15,6 +16,7 @@ const PORT = process.env.PORT || 5050;
 const JWT_SECRET = process.env.DOZA_JWT_SECRET || "doza-local-secret-change-me";
 const TAX_RATE = 0;
 
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public"), { index: false }));
@@ -281,13 +283,14 @@ app.get("/api/bootstrap", async (req, res) => {
 });
 
 app.get("/api/state", auth, async (req, res) => {
-  const [menu, orders, shift, cashAudit, clients, materials, businessDate] = await Promise.all([
-    getMenu(), getOrders(), getActiveShift(), getCashAudit(), getClients(), getMaterials(), getCurrentBusinessDate()
+  const [menu, shift, cashAudit, clients, materials, businessDate] = await Promise.all([
+    getMenu(), getActiveShift(), getCashAudit(), getClients(), getMaterials(), getCurrentBusinessDate()
   ]);
   const [dayMaterials, dayConsumptions] = await Promise.all([
     getDayMaterialSnapshots(businessDate), getDayConsumptions(businessDate)
   ]);
   const staff = await all("SELECT id, name, role FROM staff ORDER BY name");
+  const orders = await getOrders(3);
   const normalizedShift = {
     isOpen: !!shift?.is_open, openedAt: shift?.opened_at, closedAt: shift?.closed_at,
     openingFloat: shift?.opening_float, openedBy: shift?.opened_by
@@ -297,6 +300,11 @@ app.get("/api/state", auth, async (req, res) => {
     expectedCash: await expectedDrawerCash(shift), materials, businessDate,
     dayMaterials, dayConsumptions, shiftMaterials: dayMaterials, shiftConsumptions: dayConsumptions
   });
+});
+
+app.get("/api/orders/all", auth, async (req, res) => {
+  const orders = await getOrders(300);
+  return res.json({ orders });
 });
 
 // ---------- Shift ----------
