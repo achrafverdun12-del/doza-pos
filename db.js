@@ -105,7 +105,7 @@ async function init() {
     `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('BARISTA 1', 'YASSINE', 'barista', '$2b$10$RKrVEcbZWLcXfI.r0VDQXueOcF/XFfnSVJoCFevKqbK6qTLlnA0ZK')`,
     `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('CHEF', 'REDA', 'admin', '$2b$10$dk4XbF9KFset1aXJF1fQ2Owr5Pg3Miwy.w/k/89joMOTJElqccahO')`,
     `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('CHEF 2', 'AHMED', 'admin', '$2b$10$1p0CaIoR0d0Sh4n6ptQx0ehE7KNsY2hYuh.UlAbWjaAdbAiRbGDu.')`,
-    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('DOZACOFFEE', 'Doza Cloud Admin', 'admin', '$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy')`,
+    `INSERT OR IGNORE INTO staff (id, name, role, pin_hash) VALUES ('DOZACOFFEE', 'Doza Cloud Admin', 'admin', '$2b$10$EaDKwkw49H3he.SrO79ao.nz.lsVywnp7R46cFhXwUEZWWK2QyCw2')`,
     // --- SEED MENU ---
     `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidEspresso}', 'Espresso', 'Coffee', 16, 60)`,
     `INSERT OR IGNORE INTO menu_items (id, name, category, price, stock) VALUES ('${uuidCappuccino}', 'Cappuccino', 'Coffee', 24, 50)`,
@@ -126,7 +126,7 @@ async function init() {
     // --- META FLAG ---
     `INSERT OR IGNORE INTO meta (key, value) VALUES ('menu_defaults_removed_v1', '1')`,
     // --- UPDATES ---
-    `UPDATE staff SET pin_hash = '$2b$10$uU.vaIxwsK39IOOjAI/TwO7Sr4UrLV3Rd6YwX3vM3Glro9VZ7RtVy' WHERE id = 'DOZACOFFEE'`,
+    `UPDATE staff SET pin_hash = '$2b$10$EaDKwkw49H3he.SrO79ao.nz.lsVywnp7R46cFhXwUEZWWK2QyCw2' WHERE id = 'DOZACOFFEE'`,
     `UPDATE fixed_expenses_daily SET start_date = '${today}' WHERE start_date IS NULL`,
     `UPDATE fixed_expenses_monthly SET start_date = '${today}' WHERE start_date IS NULL`,
   ], "write");
