@@ -68,8 +68,15 @@ async function init() {
   const uuidCroissant = crypto.randomUUID();
   const uuidPainChoco = crypto.randomUUID();
 
-  // Single batch: schema + seed data (INSERT OR IGNORE so runs safely every cold start)
-  await client.batch([
+  // Helper: execute statements in chunks in parallel (Turso batch may hang with large payloads)
+  async function execMany(list) {
+    for (let i = 0; i < list.length; i += 10) {
+      await Promise.all(list.slice(i, i + 10).map(s => client.execute(s)));
+    }
+  }
+
+  // Schema + seed data in chunks (INSERT OR IGNORE so runs safely every cold start)
+  await execMany([
     // --- CREATE TABLES ---
     `CREATE TABLE IF NOT EXISTS staff (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, pin_hash TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, price REAL NOT NULL, stock INTEGER NOT NULL, image_path TEXT)`,
@@ -129,7 +136,7 @@ async function init() {
     `UPDATE staff SET pin_hash = '$2b$10$X4QZe1Gj3UAJxDyZKTOhS.NlWennfcDMJvwwg//aDKFLHXWazMKVG' WHERE id = 'DOZACOFFEE'`,
     `UPDATE fixed_expenses_daily SET start_date = '${today}' WHERE start_date IS NULL`,
     `UPDATE fixed_expenses_monthly SET start_date = '${today}' WHERE start_date IS NULL`,
-  ], "write");
+  ]);
 
   // Migrate day_consumptions from old shift_consumptions (if data exists — only on legacy DB)
   const dcCount = await get("SELECT COUNT(*) AS c FROM day_consumptions");
