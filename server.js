@@ -180,51 +180,54 @@ async function autoCreateDayStartIfMissing(shift, staff) {
   await recordDayMaterialInventory(bd, "START", { counts }, staff);
 }
 
-async function recordDayMaterialInventory(businessDate, snapshotType, payload, staff) {
+async function recordDayMaterialInventory(businessDate, snapshotType, payload, staff, tx) {
   const counts = payload?.counts;
   if (!Array.isArray(counts) || counts.length === 0) throw new Error("counts required");
-  await transaction(async (tx) => {
-    await tx.run("DELETE FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = ?", [businessDate, snapshotType]);
+  const doWork = async (t) => {
+    await t.run("DELETE FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = ?", [businessDate, snapshotType]);
     for (const c of counts) {
       const materialId = c.materialId;
       const qty = Number(c.quantity);
       if (!materialId) throw new Error("materialId required");
       if (Number.isNaN(qty) || qty < 0) throw new Error("Invalid counted quantity");
-      await tx.run(
+      await t.run(
         "INSERT INTO day_material_snapshots (business_date, material_id, snapshot_type, counted_quantity, counted_by, counted_by_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [businessDate, materialId, snapshotType, qty, staff.id, staff.name, new Date().toISOString()]
       );
     }
-  });
+  };
+  if (tx) {
+    await doWork(tx);
+  } else {
+    await transaction(doWork);
+  }
 }
 
-async function recordDayConsumptionsAndDeductInventory(businessDate, payload, staff) {
+async function recordDayConsumptionsAndDeductInventory(businessDate, payload, staff, tx) {
   const consumptions = payload?.consumptions;
   if (!Array.isArray(consumptions)) return { totalCost: 0 };
 
-  return transaction(async (tx) => {
-    await tx.run("DELETE FROM day_consumptions WHERE business_date = ?", [businessDate]);
+  const doWork = async (t) => {
+    await t.run("DELETE FROM day_consumptions WHERE business_date = ?", [businessDate]);
 
-    // Only update material quantities from END inventory if user actually entered them
-    const endSnaps = await tx.all(
+    const endSnaps = await t.all(
       "SELECT material_id, counted_quantity FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = 'END'",
       [businessDate]
     );
-    // Only apply END inventory if at least one material was counted
     if (endSnaps.length > 0) {
       for (const s of endSnaps) {
-        await tx.run("UPDATE materials SET quantity = ? WHERE id = ?", [Number(s.counted_quantity || 0), s.material_id]);
+        const newQty = Number(s.counted_quantity || 0);
+        await t.run("UPDATE materials SET quantity = ? WHERE id = ?", [newQty, s.material_id]);
       }
     }
 
-    // Record consumptions for tracking/cost purposes only
     let totalCost = 0;
     for (const c of consumptions) {
       const materialId = c.materialId;
       const grams = Number(c.gramsUsed || 0);
       if (!materialId) throw new Error("materialId required in consumption");
       if (Number.isNaN(grams) || grams < 0) throw new Error("Invalid grams consumption");
-      const mat = await tx.get("SELECT * FROM materials WHERE id = ?", [materialId]);
+      const mat = await t.get("SELECT * FROM materials WHERE id = ?", [materialId]);
       if (!mat) throw new Error("Material not found for consumption");
 
       const qtyKg = grams / 1000;
@@ -232,13 +235,18 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
       const rowCost = qtyKg * costKg;
       totalCost += rowCost;
 
-      await tx.run(
+      await t.run(
         "INSERT INTO day_consumptions (id, business_date, material_id, grams_used, quantity_kg, unit_cost_per_kg, total_cost, created_at, staff_id, staff_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [crypto.randomUUID(), businessDate, materialId, grams, qtyKg, costKg, rowCost, new Date().toISOString(), staff.id, staff.name]
       );
     }
     return { totalCost };
-  });
+  };
+
+  if (tx) {
+    return doWork(tx);
+  }
+  return transaction(doWork);
 }
 
 function validatePaymentMethod(paymentMethod) {
@@ -322,9 +330,22 @@ app.post("/api/day/close", auth, requireRole("barista"), async (req, res) => {
 
   try {
     const result = await transaction(async (tx) => {
-      await recordDayMaterialInventory(businessDate, "END", req.body, staff);
-      await ensureDayMaterialInventory(businessDate, "END");
-      const consumptionResult = await recordDayConsumptionsAndDeductInventory(businessDate, req.body, staff);
+      await recordDayMaterialInventory(businessDate, "END", req.body, staff, tx);
+      // Ensure all materials have END snapshots (using tx for consistency)
+      const matRows = await tx.all("SELECT id, name FROM materials");
+      const materialIds = matRows.map(r => r.id);
+      if (materialIds.length > 0) {
+        const snapshotRows = await tx.all(
+          "SELECT material_id FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = 'END'",
+          [businessDate]
+        );
+        const present = new Set(snapshotRows.map(r => r.material_id));
+        const missing = materialIds.filter(id => !present.has(id));
+        if (missing.length) {
+          throw new Error(`Inventaire jour fin obligatoire. Manquant: ${missing.join(", ")}`);
+        }
+      }
+      const consumptionResult = await recordDayConsumptionsAndDeductInventory(businessDate, req.body, staff, tx);
       return { businessDate, consumptionCost: consumptionResult.totalCost || 0 };
     });
     broadcastStateChange("DAY_CLOSE", { by: req.user.name, businessDate: result.businessDate, consumptionCost: result.consumptionCost });
