@@ -58,7 +58,7 @@ async function transaction(fn) {
 async function execMany(sqlStatements) {
   if (!client) await initPromise;
   if (!client) throw new Error("Database not connected: " + (initError?.message || "unknown"));
-  await client.batch(sqlStatements);
+  await client.executeMultiple(sqlStatements.join(";"));
 }
 
 async function init() {
@@ -126,7 +126,7 @@ async function init() {
       { id: "u3", name: "Admin", role: "admin", pin: "9999" },
     ];
     for (const u of users) {
-      await run("INSERT INTO staff (id, name, role, pin_hash) VALUES (?, ?, ?, ?)", [u.id, u.name, u.role, bcrypt.hashSync(u.pin, 10)]);
+      await run("INSERT INTO staff (id, name, role, pin_hash) VALUES (?, ?, ?, ?)", [u.id, u.name, u.role, bcrypt.hashSync(u.pin, 4)]);
     }
   }
 
