@@ -230,17 +230,6 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
   const doWork = async (t) => {
     await t.run("DELETE FROM day_consumptions WHERE business_date = ?", [businessDate]);
 
-    const endSnaps = await t.all(
-      "SELECT material_id, counted_quantity FROM day_material_snapshots WHERE business_date = ? AND snapshot_type = 'END'",
-      [businessDate]
-    );
-    if (endSnaps.length > 0) {
-      for (const s of endSnaps) {
-        const newQty = Number(s.counted_quantity || 0);
-        await t.run("UPDATE materials SET quantity = ? WHERE id = ?", [newQty, s.material_id]);
-      }
-    }
-
     let totalCost = 0;
     for (const c of consumptions) {
       const materialId = c.materialId;
@@ -259,6 +248,7 @@ async function recordDayConsumptionsAndDeductInventory(businessDate, payload, st
         "INSERT INTO day_consumptions (id, business_date, material_id, grams_used, quantity_kg, unit_cost_per_kg, total_cost, created_at, staff_id, staff_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [crypto.randomUUID(), businessDate, materialId, grams, qtyKg, costKg, rowCost, new Date().toISOString(), staff.id, staff.name]
       );
+      await t.run("UPDATE materials SET quantity = quantity - ? WHERE id = ?", [qtyKg, materialId]);
     }
     return { totalCost };
   };
@@ -315,7 +305,7 @@ app.get("/api/state", auth, async (req, res) => {
   };
   return res.json({
     staff, menu, orders, shift: normalizedShift, cashAudit, clients,
-    expectedCash: await expectedDrawerCash(shift), materials, businessDate,
+    expectedCash: (cashAudit && Number(cashAudit.actualCash) > 0) ? Number(cashAudit.actualCash) : await expectedDrawerCash(shift), materials, businessDate,
     dayMaterials, dayConsumptions, shiftMaterials: dayMaterials, shiftConsumptions: dayConsumptions
   });
 });
