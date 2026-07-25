@@ -14,4 +14,8 @@ hash.txt
 
 auth
 auth-wal
+db
+db-wal
+db-shm
+turso_export/
 .env*.local

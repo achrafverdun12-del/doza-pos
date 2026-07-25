@@ -1257,29 +1257,6 @@ app.delete("/api/admin/materials/stock-entry/:id", auth, requireRole("admin"), a
   return res.json({ ok: true });
 });
 
-// TEMP: Turso data recovery endpoint (remove after migration)
-app.get("/api/_turso-export", async (req, res) => {
-  try {
-    const { createClient } = require("@libsql/client");
-    const turso = createClient({
-      url: process.env.TURSO_URL,
-      authToken: process.env.TURSO_TOKEN,
-    });
-    await turso.execute("SELECT 1");
-    const tables = ["orders", "order_items", "clients", "client_ledger", "cash_audit", "staff", "menu_items", "materials", "shifts", "expenses_ledger", "fixed_expenses_daily", "fixed_expenses_monthly", "day_material_snapshots", "day_consumptions", "stock_entries", "shift_material_snapshots", "meta"];
-    const data = {};
-    for (const t of tables) {
-      try {
-        const r = await turso.execute("SELECT * FROM " + t);
-        data[t] = r.rows;
-      } catch { data[t] = []; }
-    }
-    return res.json(data);
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-});
-
 // Fallback
 app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
