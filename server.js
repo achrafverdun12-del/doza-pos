@@ -364,6 +364,7 @@ app.post("/api/day/close", auth, requireRole("barista"), async (req, res) => {
       const consumptionResult = await recordDayConsumptionsAndDeductInventory(businessDate, req.body, staff, tx);
       return { businessDate, consumptionCost: consumptionResult.totalCost || 0 };
     });
+    invalidateCache("materials");
     broadcastStateChange("DAY_CLOSE", { by: req.user.name, businessDate: result.businessDate, consumptionCost: result.consumptionCost });
     return res.json({ ok: true, ...result });
   } catch (e) {

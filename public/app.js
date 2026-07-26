@@ -693,7 +693,7 @@ function renderShiftMaterials() {
   const start = state.shiftMaterials?.start || {};
   const end = state.shiftMaterials?.end || {};
   el.shiftMaterialsList.innerHTML = (state.materials || []).map((mat) => {
-    const value = (end[mat.id] ?? mat.quantity ?? start[mat.id] ?? 0);
+    const value = (end[mat.id] ?? start[mat.id] ?? mat.quantity ?? 0);
     const previous = (state.shiftConsumptions || []).find((c) => c.material_id === mat.id);
     const gramsUsed = previous ? Number(previous.grams_used || 0) : 0;
     return `
