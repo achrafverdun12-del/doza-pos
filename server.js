@@ -491,16 +491,19 @@ app.post("/api/orders", auth, requireRole("barista"), async (req, res) => {
 });
 
 // ---------- Menu (admin) + images ----------
-const menuUploadDir = path.join(__dirname, "public", "uploads", "menu");
-try { fs.mkdirSync(menuUploadDir, { recursive: true }); } catch {}
-const upload = multer({ dest: menuUploadDir, limits: { fileSize: 2 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 app.post("/api/menu", auth, requireRole("admin"), upload.single("image"), async (req, res) => {
   const { name, category, price } = req.body;
   const p = Number(price);
   if (!name || !category || Number.isNaN(p) || p <= 0) return res.status(400).json({ error: "Invalid menu payload" });
   const id = crypto.randomUUID();
-  const image_path = req.file ? `/uploads/menu/${path.basename(req.file.path)}` : null;
+  let image_path = null;
+  if (req.file) {
+    const ext = req.file.mimetype === "image/png" ? "png" : "jpg";
+    const b64 = req.file.buffer.toString("base64");
+    image_path = `data:${req.file.mimetype};base64,${b64}`;
+  }
   await run("INSERT INTO menu_items (id, name, category, price, stock, image_path) VALUES (?, ?, ?, ?, 0, ?)",
     [id, String(name).trim(), String(category).trim(), p, image_path]);
   invalidateCache("menu");
