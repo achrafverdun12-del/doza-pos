@@ -1151,15 +1151,21 @@ app.get("/api/admin/export/xlsx", auth, requireRole("admin"), async (req, res) =
 
 app.get("/api/admin/pnl/shifts-history", auth, requireRole("admin"), async (req, res) => {
   const days = await all("SELECT DISTINCT substr(opened_at,1,10) AS day FROM shifts WHERE opened_at IS NOT NULL ORDER BY day DESC LIMIT 120");
-  const rows = await Promise.all(days.map(async (d, idx) => {
+  const dayList = days.map(d => d.day);
+  if (dayList.length === 0) return res.json({ rows: [], today: { cashRevenue: 0, actualCash: 0, consumptionCost: 0, net: 0 } });
+  const [cashRows, consRows, auditRow] = await Promise.all([
+    all("SELECT substr(created_at,1,10) AS day, COALESCE(SUM(total),0) AS r FROM orders WHERE payment_method='CASH' AND substr(created_at,1,10) = ANY(?) GROUP BY substr(created_at,1,10)", [dayList]),
+    all("SELECT business_date AS day, COALESCE(SUM(total_cost),0) AS c FROM day_consumptions WHERE business_date = ANY(?) GROUP BY business_date", [dayList]),
+    get("SELECT actual_cash, variance FROM cash_audit WHERE id = 1")
+  ]);
+  const cashMap = {}; for (const r of cashRows) cashMap[r.day] = Number(r.r);
+  const consMap = {}; for (const r of consRows) consMap[r.day] = Number(r.c);
+  const actualCash = Number(auditRow?.actual_cash || 0);
+  const variance = Number(auditRow?.variance || 0);
+  const rows = days.map((d, idx) => {
     const day = d.day;
-    const cashRevRow = await get("SELECT COALESCE(SUM(total),0) AS r FROM orders WHERE substr(created_at,1,10) = ? AND payment_method = 'CASH'", [day]);
-    const consRow = await get("SELECT COALESCE(SUM(total_cost),0) AS c FROM day_consumptions WHERE business_date = ?", [day]);
-    const cashRevenue = Number(cashRevRow?.r || 0);
-    const consumptionCost = Number(consRow?.c || 0);
-    const auditRow = await get("SELECT actual_cash, variance FROM cash_audit WHERE id = 1");
-    const actualCash = Number(auditRow?.actual_cash || 0);
-    const variance = Number(auditRow?.variance || 0);
+    const cashRevenue = cashMap[day] || 0;
+    const consumptionCost = consMap[day] || 0;
     const revenueUsed = actualCash > 0 ? Math.max(0, actualCash) : cashRevenue;
     return {
       shiftId: `DAY-${idx + 1}`,
@@ -1169,7 +1175,7 @@ app.get("/api/admin/pnl/shifts-history", auth, requireRole("admin"), async (req,
       cashRevenue, actualCash, variance, consumptionCost,
       net: revenueUsed - consumptionCost
     };
-  }));
+  });
   const today = await getCurrentBusinessDate();
   const todayRows = rows.filter((r) => r.day === today);
   const todayPnl = {
@@ -1226,13 +1232,23 @@ app.get("/api/admin/history/orders", auth, requireRole("admin"), async (req, res
     WHERE substr(o.created_at,1,10) BETWEEN ? AND ?
     ORDER BY o.created_at DESC
   `, [from, to]);
-  const mapped = await Promise.all(orders.map(async (o) => ({
+  const items = await all(`
+    SELECT oi.order_id, oi.item_id AS id, oi.item_name AS name, oi.price, oi.qty
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE substr(o.created_at,1,10) BETWEEN ? AND ?
+  `, [from, to]);
+  const itemsByOrder = {};
+  for (const it of items) {
+    (itemsByOrder[it.order_id] ||= []).push({ id: it.id, name: it.name, price: it.price, qty: it.qty });
+  }
+  const mapped = orders.map((o) => ({
     id: o.id, createdAt: o.created_at, subtotal: o.subtotal, tax: o.tax,
     total: o.total, cashReceived: o.cash_received, change: o.change_due,
     paymentMethod: o.payment_method, clientId: o.client_id, clientName: o.client_name || null,
     staffId: o.staff_id, staffName: o.staff_name, shiftOpenedAt: o.shift_opened_at,
-    items: await all("SELECT item_id as id, item_name as name, price, qty FROM order_items WHERE order_id = ?", [o.id])
-  })));
+    items: itemsByOrder[o.id] || []
+  }));
   return res.json({ orders: mapped });
 });
 
