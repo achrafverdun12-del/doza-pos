@@ -70,7 +70,11 @@ async function getCashAudit() {
 }
 
 async function getMenu() {
-  return cached("menu", 30000, () => all("SELECT * FROM menu_items ORDER BY name"));
+  return cached("menu", 30000, () =>
+    all("SELECT id, name, category, price, stock, (image_path IS NOT NULL) AS has_image FROM menu_items ORDER BY name").then(rows =>
+      rows.map(r => ({ ...r, has_image: !!r.has_image, image_path: r.has_image ? `/api/menu/${r.id}/image` : null }))
+    )
+  );
 }
 
 async function getClients() {
@@ -492,6 +496,25 @@ app.post("/api/orders", auth, requireRole("barista"), async (req, res) => {
 
 // ---------- Menu (admin) + images ----------
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+
+app.get("/api/menu/:id/image", async (req, res) => {
+  try {
+    const item = await get("SELECT image_path FROM menu_items WHERE id = ?", [req.params.id]);
+    if (!item || !item.image_path) return res.status(404).json({ error: "Image not found" });
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(item.image_path);
+    if (!match) return res.status(404).json({ error: "Image not found" });
+    const contentType = match[1];
+    const buffer = Buffer.from(match[2], "base64");
+    res.set({
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Length": String(buffer.length)
+    });
+    return res.send(buffer);
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
 
 app.post("/api/menu", auth, requireRole("admin"), upload.single("image"), async (req, res) => {
   const { name, category, price } = req.body;

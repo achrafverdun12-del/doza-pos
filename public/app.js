@@ -438,7 +438,7 @@ async function refreshFullOrders() {
 function bindRealtime() {
   clearInterval(pollTimer);
   clearInterval(ordersRefreshTimer);
-  // Lightweight polling: small payload every 30s
+  // Lightweight polling: small payload every 60s
   pollTimer = setInterval(async () => {
     if (!state.token) return;
     try {
@@ -446,14 +446,14 @@ function bindRealtime() {
     } catch {
       // Ignore transient failures
     }
-  }, 30000);
+  }, 60000);
   // Full orders: only fetched when admin, less frequently
   ordersRefreshTimer = setInterval(async () => {
     if (!state.token) return;
     try {
       await refreshFullOrders();
     } catch { }
-  }, 60000);
+  }, 120000);
 }
 
 function setPaymentModeUI() {
