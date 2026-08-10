@@ -71,9 +71,14 @@ async function getCashAudit() {
 
 async function getMenu() {
   return cached("menu", 30000, () =>
-    all("SELECT id, name, category, price, stock, (image_path IS NOT NULL) AS has_image FROM menu_items ORDER BY name").then(rows =>
-      rows.map(r => ({ ...r, has_image: !!r.has_image, image_path: r.has_image ? `/api/menu/${r.id}/image` : null }))
-    )
+    all("SELECT id, name, category, price, stock, (image_path IS NOT NULL) AS has_image FROM menu_items ORDER BY name").then(rows => {
+      const staticDir = path.join(__dirname, "public", "uploads", "menu");
+      return rows.map(r => {
+        const staticFile = path.join(staticDir, r.id + ".jpg");
+        if (fs.existsSync(staticFile)) return { ...r, image_path: `/uploads/menu/${r.id}.jpg` };
+        return { ...r, image_path: r.has_image ? `/api/menu/${r.id}/image` : null };
+      });
+    })
   );
 }
 
